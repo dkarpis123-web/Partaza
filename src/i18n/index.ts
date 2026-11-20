@@ -1,6 +1,7 @@
 // Two languages. The app is written in Lithuanian; English is produced when text is shown:
 // every piece of text passes through tr(), which looks it up in the dictionary (src/i18n/en.ts).
 // Text with no translation stays Lithuanian, so a missing entry never breaks a screen.
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 import { EN, EN_PATTERNS } from './en';
@@ -34,14 +35,18 @@ export function startLang() {
   if (started) return;
   started = true;
   apply(detect());
+  // On phones there is no localStorage; the saved choice arrives a moment later.
+  AsyncStorage.getItem(KEY)
+    .then((saved) => {
+      if ((saved === 'lt' || saved === 'en') && saved !== current) apply(saved);
+    })
+    .catch(() => {});
 }
 
 export function setLang(lang: Lang) {
-  try {
-    globalThis.localStorage?.setItem(KEY, lang);
-  } catch {
+  AsyncStorage.setItem(KEY, lang).catch(() => {
     // not saved; still applies for this visit
-  }
+  });
   apply(lang);
 }
 
