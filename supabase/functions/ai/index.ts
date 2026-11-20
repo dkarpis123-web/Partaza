@@ -2,6 +2,7 @@
 //   { action: 'recognize', photos: [public photo URLs], lang }       → title, part number, fit, vehicle type, visible damage
 //   { action: 'match', photo: public photo URL, lang }               → which listings on the marketplace show the same kind of part
 //   { action: 'improve', listing_id, lang }                        → corrected title, description, part number and fit for the caller's own listing
+//   { action: 'shipping', title, oem, fits, from, to, lang }       → rough parcel weight/size and a postage estimate between two countries, with sources
 //   { action: 'price', title, oem, fits, condition, defects, country, lang } → price range in EUR from public web pages, with sources
 // Only signed-in users may call it, and each user has a daily limit, because every call costs money.
 //
@@ -277,6 +278,73 @@ async function price(body: Json): Promise<Json> {
   };
 }
 
+/** A rough postage estimate: typical weight and packed size of this part, and what carriers charge between the two countries. */
+async function shipping(body: Json): Promise<Json> {
+  const title = text(body.title, 120);
+  const oem = text(body.oem, 60);
+  const from = /^[A-Z]{2}$/.test(body.from ?? '') ? body.from : '';
+  const to = /^[A-Z]{2}$/.test(body.to ?? '') ? body.to : '';
+  if ((!title && !oem) || !from || !to) return { error: 'nothing_to_search' };
+
+  const result = await claude({
+    model: SEARCH_MODEL,
+    max_tokens: 3000,
+    tools: [
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 4 },
+      {
+        name: 'report_shipping',
+        description: 'Reports the estimated parcel and postage cost. Call it once, after searching.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            found: { type: 'boolean', description: 'false if no usable carrier prices for this route were found.' },
+            weight_kg: { type: 'number', description: 'Estimated weight of the packed part in kg.' },
+            size_cm: { type: 'string', description: 'Estimated packed size, e.g. "60 x 40 x 30".' },
+            low: { type: 'number', description: 'Cheapest suitable service in EUR.' },
+            high: { type: 'number', description: 'Dearest reasonable service in EUR (e.g. courier to the door).' },
+            note: { type: 'string', description: `Two sentences at most in ${language(body.lang)}: which carriers and services the prices are for, and what the estimate assumes.` },
+            sources: {
+              type: 'array',
+              items: { type: 'object', properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] },
+              description: 'Carrier or post price pages used (at most 4). Only pages returned by the search.',
+            },
+          },
+          required: ['found', 'note', 'sources'],
+        },
+      },
+    ],
+    messages: [{
+      role: 'user',
+      content:
+        `A vehicle part is to be sent as a parcel.\nPart: ${title || '(no title)'}\nPart number: ${oem || '(unknown)'}\nFits: ${text(body.fits, 200) || '(unknown)'}\n` +
+        `From country: ${from}\nTo country: ${to}\n\n` +
+        `First estimate the weight and packed size of this part (search for the part if you are unsure). Then search for current parcel prices for that weight and size ` +
+        `from ${from} to ${to}: the national post of ${from} and parcel carriers or parcel lockers that serve this route. Prices in EUR. ` +
+        `Then call the report_shipping tool exactly once (do not answer in plain text). If you find no carrier prices for this route, set found to false rather than guess.`,
+    }],
+  });
+  const blocks: Json[] = result.content ?? [];
+  const found = toolInput(result, 'report_shipping');
+  if (found.found !== true || !(Number(found.low) > 0)) return { found: false, note: text(found.note, 400) };
+  const seen = new Set<string>();
+  for (const block of blocks) {
+    if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) block.content.forEach((r: Json) => r.url && seen.add(r.url));
+  }
+  const low = Number(found.low);
+  return {
+    found: true,
+    low,
+    high: Number(found.high) >= low ? Number(found.high) : low,
+    weight_kg: Number(found.weight_kg) > 0 ? Number(found.weight_kg) : null,
+    size_cm: text(found.size_cm, 40),
+    note: text(found.note, 400),
+    sources: (Array.isArray(found.sources) ? found.sources : [])
+      .filter((s: Json) => typeof s.url === 'string' && seen.has(s.url))
+      .slice(0, 4)
+      .map((s: Json) => ({ title: text(s.title, 120), url: s.url })),
+  };
+}
+
 /** Reviews the seller's own listing against its photos and proposes corrections; nothing is saved here. */
 // deno-lint-ignore no-explicit-any
 async function improve(body: Json, admin: any, userId: string): Promise<Json> {
@@ -361,7 +429,7 @@ Deno.serve(async (req: Request) => {
   } catch (_) {
     return reply({ error: 'bad_request' });
   }
-  if (!['recognize', 'price', 'match', 'improve'].includes(body.action)) return reply({ error: 'bad_request' });
+  if (!['recognize', 'price', 'match', 'improve', 'shipping'].includes(body.action)) return reply({ error: 'bad_request' });
 
   const { data: used } = await admin.rpc('ai_use', { p_user: who.user.id, p_limit: DAILY_LIMIT });
   if (used === false) return reply({ error: 'daily_limit' });
@@ -369,6 +437,7 @@ Deno.serve(async (req: Request) => {
   try {
     if (body.action === 'match') return reply(await match(body, admin));
     if (body.action === 'improve') return reply(await improve(body, admin, who.user.id));
+    if (body.action === 'shipping') return reply(await shipping(body));
     return reply(body.action === 'recognize' ? await recognize(body) : await price(body));
   } catch (error) {
     console.error('ai failed', body.action, (error as Error).message);

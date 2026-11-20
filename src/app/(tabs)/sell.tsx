@@ -1,29 +1,21 @@
-import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Image, Platform, Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
+import { type Marks } from '@/components/MarkedPhoto';
+import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { readVin } from '@/services/vin';
 import { useStore } from '@/store';
-import { colors, money, radius } from '@/theme';
-import { Text } from '@/components/Text';
+import { money } from '@/theme';
 
 const SHOTS = ['1. Visa dalis', '2. Numeris ar lipdukas', '3. Pažeidimai iš arti'];
-
-function notify(message: string) {
-  if (Platform.OS === 'web') {
-    // Alert.alert does nothing on web.
-    window.alert(message);
-  } else {
-    Alert.alert('Partaza', message);
-  }
-}
 
 export default function SellScreen() {
   const router = useRouter();
   const { donors, addDonor, registered, live } = useStore();
   const [photos, setPhotos] = useState<string[]>([]);
+  const [marks, setMarks] = useState<Marks>({});
   const [fromDonor, setFromDonor] = useState(false);
   const [whole, setWhole] = useState(false);
   const [donorId, setDonorId] = useState<string | null>(null);
@@ -51,30 +43,9 @@ export default function SellScreen() {
     setError('');
   };
 
-  const add = async (source: 'camera' | 'library') => {
-    try {
-      if (source === 'camera') {
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) {
-          notify('Kad nufotografuotumėte dalį, leiskite programėlei naudoti kamerą.');
-          return;
-        }
-      }
-      const result =
-        source === 'camera'
-          ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-      if (!result.canceled) {
-        setPhotos((current) => [...current, result.assets[0].uri]);
-      }
-    } catch {
-      notify('Nepavyko atidaryti kameros. Pasirinkite nuotrauką iš galerijos.');
-    }
-  };
-
   const next = () => {
     if (fromDonor && !donorId) return setError('Pasirinkite automobilį arba pridėkite naują.');
-    router.push({ pathname: '/sell/review', params: { photos: JSON.stringify(photos), donor: fromDonor && donorId ? donorId : '', whole: fromDonor && whole ? '1' : '' } });
+    router.push({ pathname: '/sell/review', params: { photos: JSON.stringify(photos), marks: JSON.stringify(marks), donor: fromDonor && donorId ? donorId : '', whole: fromDonor && whole ? '1' : '' } });
   };
 
   return (
@@ -118,38 +89,10 @@ export default function SellScreen() {
       <Heading>{fromDonor && whole ? 'Nufotografuokite automobilį' : 'Nufotografuokite dalį'}</Heading>
       <Muted>Trys nuotraukos, ir skelbimas beveik paruoštas. Pavadinimą, numerį ir kainą padėsime užpildyti kitame žingsnyje.</Muted>
 
+      <Muted>{SHOTS.join(' · ')}</Muted>
       <Card>
-        {SHOTS.map((label, index) => {
-          const uri = photos[index];
-          return (
-            <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              {uri ? (
-                <Image source={{ uri }} accessibilityLabel={label} resizeMode="contain" style={{ width: 88, height: 88, borderRadius: radius.sm, backgroundColor: colors.ink }} />
-              ) : (
-                <View style={{ width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.placeholder }} />
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>{label}</Text>
-                <Text style={{ fontSize: 13, color: uri ? colors.ok : colors.muted }}>{uri ? 'Nufotografuota' : 'Dar nėra'}</Text>
-              </View>
-              {uri ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Pašalinti nuotrauką: ${label}`}
-                  onPress={() => setPhotos((current) => current.filter((_, i) => i !== index))}
-                  style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
-                  <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>Pašalinti</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          );
-        })}
+        <PhotoEditor photos={photos} onChange={setPhotos} marks={marks} onMarks={setMarks} />
       </Card>
-
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <Button label="Fotografuoti" kind="dark" onPress={() => add('camera')} style={{ flex: 1 }} />
-        <Button label="Iš galerijos" kind="outline" onPress={() => add('library')} style={{ flex: 1 }} />
-      </View>
       <Muted>Patarimas: nuvalykite dalį, fotografuokite dienos šviesoje ant vienspalvio fono. Pažeidimus nufotografuokite iš arti.</Muted>
     </Page>
   );

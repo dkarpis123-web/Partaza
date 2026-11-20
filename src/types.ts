@@ -83,6 +83,8 @@ export interface Listing {
   shipping: number | null;
   /** Delivery price to other countries; null = a buyer abroad asks the seller first. */
   shippingAbroad?: number | null;
+  /** Defect marks on photos: photo address → [x, y] points as shares of the picture's size. */
+  photoMarks?: Record<string, number[][]>;
   /** The seller ships but has not set a price: the buyer asks for it in a message. */
   shippingQuote?: boolean;
   pickup: boolean;

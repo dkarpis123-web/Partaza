@@ -1,3 +1,4 @@
+import { remapMarks } from '@/components/MarkedPhoto';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -5,7 +6,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
 import { getLang } from '@/i18n';
-import type { Recognition, WebPrices } from '@/services/ai';
+import type { Recognition, ShippingEstimate, WebPrices } from '@/services/ai';
 import { countryCode } from '@/services/geo';
 import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, Review, SavedSearch, SellerKind, Thread, User } from '@/types';
 
@@ -90,6 +91,7 @@ interface Store extends State {
   aiImprove: (listingId: string) => Promise<{ fix?: ListingFix; error?: string }>;
   /** Saves the proposed texts the seller confirmed. */
   applyFix: (listingId: string, fields: Partial<Omit<ListingFix, 'notes'>>) => Result;
+  aiShipping: (part: { title: string; oem: string; fits: string; from: string; to: string }) => Promise<{ estimate?: ShippingEstimate; error?: string }>;
   aiPrices: (part: { title: string; oem: string; fits: string; condition: string; defects: boolean; country: string }) => Promise<{ prices?: WebPrices; error?: string }>;
   /** Follows or unfollows a seller. */
   toggleFollow: (sellerId: string) => Result;
@@ -104,7 +106,7 @@ interface Store extends State {
   changePassword: (password: string) => Result;
   /** Finishes a link from an e-mail (confirmation or password reset) that brought the person back to the site. */
   completeAuthLink: (hash: string) => Promise<{ kind: 'recovery' | 'signedIn' | 'error' | 'none'; message?: string }>;
-  updatePhotos: (listingId: string, photos: string[]) => Result;
+  updatePhotos: (listingId: string, photos: string[], marks?: Record<string, number[][]>) => Result;
   signIn: (email: string, password: string) => Result;
   signOut: () => Result;
   setKind: (kind: SellerKind) => Result;
@@ -211,7 +213,7 @@ function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
-    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad),
+    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad), photoMarks: row.photo_marks && typeof row.photo_marks === 'object' ? row.photo_marks : {},
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
   };
@@ -756,6 +758,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { prices: { found: data.found === true, low: data.low, typical: data.typical, high: data.high, note: data.note ?? '', sources: data.sources ?? [] } };
     };
 
+    const aiShipping: Store['aiShipping'] = async (part) => {
+      const { data, error } = await askAi({ action: 'shipping', ...part });
+      if (!data) return { error };
+      return { estimate: { found: data.found === true, low: data.low, high: data.high, weightKg: data.weight_kg ?? null, size: data.size_cm ?? '', note: data.note ?? '', sources: data.sources ?? [] } };
+    };
+
     const aiImprove: Store['aiImprove'] = async (listingId) => {
       const { data, error } = await askAi({ action: 'improve', listing_id: listingId });
       if (!data) return { error };
@@ -842,16 +850,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { urls };
     };
 
-    const updatePhotos: Store['updatePhotos'] = async (listingId, photos) => {
+    const updatePhotos: Store['updatePhotos'] = async (listingId, photos, marks) => {
       const { me } = stateRef.current;
       const uploaded = await uploadPhotos(photos, me.id);
       if (!uploaded.urls) return uploaded.error ?? 'Nepavyko įkelti nuotraukų.';
       const urls = uploaded.urls;
+      const photoMarks = remapMarks(marks, photos, urls);
       if (supabase) {
-        const { error } = await supabase.from('listings').update({ photos: urls }).eq('id', listingId);
+        const { error } = await supabase.from('listings').update({ photos: urls, photo_marks: photoMarks }).eq('id', listingId);
         if (error) return explain(error);
       }
-      setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, photos: urls } : l)) }));
+      setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, photos: urls, photoMarks } : l)) }));
       return null;
     };
 
@@ -932,6 +941,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
           classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
+          photo_marks: remapMarks(draft.photoMarks, draft.photos, urls),
         })
         .select()
         .single();
@@ -962,7 +972,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
             pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle,
-            description: draft.description ?? '',
+            description: draft.description ?? '', photo_marks: remapMarks(draft.photoMarks, draft.photos, urls),
           })
           .eq('id', listingId);
         if (error) return explain(error);
@@ -973,7 +983,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       setState((s) => ({
         ...s,
-        listings: s.listings.map((l) => (l.id === listingId ? { ...l, ...draft, photos: urls, donorId: draft.donorId ?? null, cost: draft.cost ?? null } : l)),
+        listings: s.listings.map((l) => (l.id === listingId ? { ...l, ...draft, photos: urls, photoMarks: remapMarks(draft.photoMarks, draft.photos, urls), donorId: draft.donorId ?? null, cost: draft.cost ?? null } : l)),
       }));
       return null;
     };
@@ -1152,7 +1162,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

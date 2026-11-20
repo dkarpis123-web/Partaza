@@ -900,6 +900,8 @@ alter table public.listings add column if not exists shipping_quote boolean not 
 -- Delivery price to other countries; null = the buyer abroad asks the seller first.
 alter table public.listings add column if not exists shipping_abroad numeric(10, 2) check (shipping_abroad is null or shipping_abroad >= 0);
 alter table public.payment_orders add column if not exists ship_country text;
+-- Defect marks on photos: { photo address: [[x, y], ...] } with x, y as shares of the picture's size.
+alter table public.listings add column if not exists photo_marks jsonb not null default '{}'::jsonb;
 
 create table if not exists public.seller_vat (
   user_id uuid primary key references public.profiles (id) on delete cascade,

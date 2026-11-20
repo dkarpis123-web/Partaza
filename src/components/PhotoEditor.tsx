@@ -2,14 +2,17 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import { MarkedPhoto, type Marks } from '@/components/MarkedPhoto';
 import { Button, Muted } from '@/components/ui';
 import { colors, radius } from '@/theme';
 import { Text } from '@/components/Text';
+import { tr } from '@/i18n';
 
 export const MAX_PHOTOS = 10;
 
 /** Thumbnails; tapping one opens its actions (move, retake, replace, remove). Plus "take a photo" and "from gallery". */
-export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: (photos: string[]) => void }) {
+export function PhotoEditor({ photos, onChange, marks, onMarks }: { photos: string[]; onChange: (photos: string[]) => void; marks?: Marks; onMarks?: (marks: Marks) => void }) {
+  const [marking, setMarking] = useState(false);
   const [problem, setProblem] = useState('');
   const full = photos.length >= MAX_PHOTOS;
   const [picked, setPicked] = useState<number | null>(null);
@@ -65,10 +68,10 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
               key={`${uri}-${index}`}
               accessibilityRole="button"
               accessibilityLabel={`Nuotrauka ${index + 1}`}
-              onPress={() => setPicked(selected === index ? null : index)}
+              onPress={() => { setPicked(selected === index ? null : index); setMarking(false); }}
               style={{ alignItems: 'center', gap: 4 }}>
               <Image source={{ uri }} resizeMode="contain" style={{ width: 132, height: 132, borderRadius: radius.md, backgroundColor: colors.ink, borderWidth: 3, borderColor: selected === index ? colors.accent : 'transparent' }} />
-              <Text style={{ fontSize: 13, fontWeight: '600', color: selected === index ? colors.accent : colors.muted }}>{index === 0 ? 'Pagrindinė' : `${index + 1}`}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: selected === index ? colors.accent : colors.muted }}>{`${index === 0 ? tr('Pagrindinė') : index + 1}${(marks?.[uri]?.length ?? 0) > 0 ? ` · ${tr('pažymėtas defektas')}` : ''}`}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -89,6 +92,23 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
             <Button label="Pakeisti kita nuotrauka" kind="outline" onPress={() => replace(selected, 'library')} />
             <Button label="Pašalinti" kind="quiet" onPress={() => { onChange(photos.filter((_, i) => i !== selected)); setPicked(null); }} />
           </View>
+          {onMarks ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <Button label={marking ? 'Baigti žymėti' : 'Pažymėti defekto vietą'} kind={marking ? 'dark' : 'outline'} onPress={() => setMarking((v) => !v)} />
+              {(marks?.[photos[selected]]?.length ?? 0) > 0 ? <Button label="Išvalyti žymes" kind="quiet" onPress={() => onMarks({ ...marks, [photos[selected]]: [] })} /> : null}
+            </View>
+          ) : null}
+          {onMarks && marking ? (
+            <>
+              <Muted>Palieskite nuotraukoje vietą, kur yra defektas – ten atsiras raudonas žiedas. Pirkėjas jį matys skelbime.</Muted>
+              <MarkedPhoto
+                uri={photos[selected]}
+                height={320}
+                marks={marks?.[photos[selected]]}
+                onAdd={(x, y) => onMarks({ ...marks, [photos[selected]]: [...(marks?.[photos[selected]] ?? []), [x, y]].slice(0, 8) })}
+              />
+            </>
+          ) : null}
         </View>
       ) : null}
       {full ? (

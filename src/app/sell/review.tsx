@@ -3,7 +3,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-native';
 
 import { CarPicker } from '@/components/CarPicker';
+import { type Marks, remapMarks } from '@/components/MarkedPhoto';
 import { PhotoEditor } from '@/components/PhotoEditor';
+import { ShippingEstimate } from '@/components/ShippingEstimate';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
 import { COUNTRIES, CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, detectCountry, useGeo } from '@/services/geo';
@@ -53,7 +55,7 @@ export default function ReviewScreen() {
 function ReviewForm({ editing }: { editing?: Listing }) {
   useLang();
   const router = useRouter();
-  const params = useLocalSearchParams<{ photos?: string; donor?: string; whole?: string }>();
+  const params = useLocalSearchParams<{ photos?: string; marks?: string; donor?: string; whole?: string }>();
   const { listings, donors, registered, phone, addListing, updateListing, live, ready, aiRecognize, aiPrices, vatCode } = useStore();
   const whole = editing ? !!editing.wholeVehicle : params.whole === '1';
   const donor = donors.find((d) => d.id === (editing ? editing.donorId : params.donor));
@@ -69,6 +71,15 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   }, [params.photos, editing]);
   // The seller can still add, remove or retake photos here before publishing.
   const [photos, setPhotos] = useState<string[]>(initialPhotos);
+  const [marks, setMarks] = useState<Marks>(() => {
+    if (editing) return editing.photoMarks ?? {};
+    try {
+      const parsed = JSON.parse(params.marks ?? '{}');
+      return parsed && typeof parsed === 'object' ? (parsed as Marks) : {};
+    } catch {
+      return {};
+    }
+  });
 
   const [loading, setLoading] = useState(!editing && !whole);
   const [isDemo, setIsDemo] = useState(false);
@@ -118,6 +129,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     setAgainProblem('');
     const answer = await aiRecognize(photos);
     setAgainBusy(false);
+    setMarks((m) => remapMarks(m, photos, answer.photos));
     setPhotos(answer.photos);
     if (!answer.result) return setAgainProblem(answer.error ?? 'DI įrankis atsakė klaida. Bandykite dar kartą po minutės.');
     if (!answer.result.title) return setAgainProblem('DI nuotraukose dalies neatpažino. Užpildykite laukus patys.');
@@ -168,6 +180,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       aiRecognize(initialPhotos).then((answer) => {
         if (!active) return;
         setPhotos(answer.photos);
+        setMarks((m) => remapMarks(m, initialPhotos, answer.photos));
         if (answer.result) fill(answer.result);
         setAiNote(answer.result ? (answer.result.title ? 'ok' : 'unsure') : answer.error ?? 'failed');
         setLoading(false);
@@ -206,7 +219,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     setPublishing(true);
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, photoMarks: marks, allowOffers,
       classic, motorsport, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
@@ -217,7 +230,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     }
     const result = await addListing(whole ? draft : { description: description.trim(),
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, photoMarks: marks, allowOffers,
       classic, motorsport, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     });
     setPublishing(false);
@@ -248,7 +261,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
 
       <Card>
         <Heading>Nuotraukos ({photos.length})</Heading>
-        <PhotoEditor photos={photos} onChange={setPhotos} />
+        <PhotoEditor photos={photos} onChange={setPhotos} marks={marks} onMarks={setMarks} />
         {live && !whole && photos.length > 0 ? (
           <Button label={againBusy ? 'DI žiūri į nuotraukas…' : proposal ? 'DI: persvarstyti dar kartą' : 'DI: atpažinti iš naujo pagal nuotraukas'} kind="outline" disabled={againBusy} onPress={lookAgain} />
         ) : null}
@@ -409,6 +422,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
                 <Chip key={s.label} label={s.label} selected={parsePrice(shipText) === s.price} onPress={() => setShipText(toText(s.price))} />
               ))}
             </View>
+            {live && (title.trim() || oem.trim()) ? <ShippingEstimate title={title.trim()} oem={oem.trim()} fits={fits.trim()} from={country} to={country} onUse={(p) => setShipText(toText(p))} /> : null}
             <Field label="Siuntimo kaina į kitas ES šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
             <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas.</Notice>
           </>

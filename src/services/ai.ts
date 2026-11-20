@@ -1,5 +1,16 @@
 import type { Listing, VehicleType } from '@/types';
 
+/** A rough postage estimate found on public carrier pages. */
+export interface ShippingEstimate {
+  found: boolean;
+  low?: number;
+  high?: number;
+  weightKg?: number | null;
+  size?: string;
+  note: string;
+  sources: { title: string; url: string }[];
+}
+
 export interface Recognition {
   title: string;
   oem: string;

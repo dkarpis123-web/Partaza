@@ -13,6 +13,9 @@ import { tr } from '@/i18n';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 import { Text } from '@/components/Text';
 import { AiReview } from '@/components/AiReview';
+import { DestinationPicker } from '@/components/DestinationPicker';
+import { ShippingEstimate } from '@/components/ShippingEstimate';
+import { MarkedPhoto, type Marks } from '@/components/MarkedPhoto';
 
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +27,7 @@ export default function ListingScreen() {
   const [ordering, setOrdering] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
+  const [marksDraft, setMarksDraft] = useState<Marks>({});
   const [shown, setShown] = useState(0);
   const [saving, setSaving] = useState(false);
   const [soldText, setSoldText] = useState('');
@@ -133,7 +137,11 @@ export default function ListingScreen() {
         )
       }>
       <View style={{ borderRadius: 14, overflow: 'hidden' }}>
-        <Photo whole uri={listing.photos[Math.min(shown, Math.max(0, listing.photos.length - 1))]} height={340} />
+        {listing.photos.length > 0 ? (
+          <MarkedPhoto uri={listing.photos[Math.min(shown, listing.photos.length - 1)]} marks={listing.photoMarks?.[listing.photos[Math.min(shown, listing.photos.length - 1)]]} height={340} />
+        ) : (
+          <Photo whole height={340} />
+        )}
         <View style={{ position: 'absolute', left: 12, bottom: 12 }}>
           <DefectBadge hasDefects={hasDefects} count={listing.defects.length} />
         </View>
@@ -162,12 +170,12 @@ export default function ListingScreen() {
         photoDraft === null ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button label="Redaguoti skelbimą" kind="outline" onPress={() => router.push({ pathname: '/sell/review', params: { edit: listing.id } })} style={{ flex: 1 }} />
-            <Button label="Keisti nuotraukas" kind="outline" onPress={() => setPhotoDraft(listing.photos)} style={{ flex: 1 }} />
+            <Button label="Keisti nuotraukas" kind="outline" onPress={() => { setPhotoDraft(listing.photos); setMarksDraft(listing.photoMarks ?? {}); }} style={{ flex: 1 }} />
           </View>
         ) : (
           <Card>
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Nuotraukos ({photoDraft.length})</Text>
-            <PhotoEditor photos={photoDraft} onChange={setPhotoDraft} />
+            <PhotoEditor photos={photoDraft} onChange={setPhotoDraft} marks={marksDraft} onMarks={setMarksDraft} />
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Button label="Atšaukti" kind="outline" onPress={() => setPhotoDraft(null)} style={{ flex: 1 }} />
               <Button
@@ -176,7 +184,7 @@ export default function ListingScreen() {
                 style={{ flex: 1 }}
                 onPress={async () => {
                   setSaving(true);
-                  const problem = await updatePhotos(listing.id, photoDraft);
+                  const problem = await updatePhotos(listing.id, photoDraft, marksDraft);
                   setSaving(false);
                   setError(problem ?? '');
                   if (!problem) {
@@ -223,12 +231,14 @@ export default function ListingScreen() {
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
+        {!mine && (listing.shipping !== null || listing.shippingQuote) ? <DestinationPicker /> : null}
         {abroad && listing.shipping !== null && abroadPrice !== null ? <Row label={`${tr('Siuntimas į')} ${countryName(dest ?? '')}`} value={money(abroadPrice)} /> : null}
         {(listing.shipping !== null || listing.shippingQuote) && crossesEuBorder(listing.country, dest) ? <Muted>{CUSTOMS_NOTE}</Muted> : null}
         {!mine && (listing.shippingQuote || (abroad && listing.shipping !== null && abroadPrice === null)) ? (
           <>
             {abroad && listing.shipping !== null ? <Muted>Nurodyta siuntimo kaina galioja pardavėjo šalyje. Siuntimo į jūsų šalį kainos teiraukitės pardavėjo.</Muted> : null}
             <Button label="Klausti siuntimo kainos" kind="outline" onPress={askShipping} />
+            {live && dest ? <ShippingEstimate title={listing.title} oem={listing.oem} fits={listing.fits} from={listing.country} to={dest} /> : null}
           </>
         ) : null}
       </Card>
