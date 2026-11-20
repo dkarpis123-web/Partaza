@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import type { ColorValue } from 'react-native';
+import { Platform, View, type ColorValue } from 'react-native';
 
 import { Brand } from '@/components/Brand';
 import { LangSwitch } from '@/components/LangSwitch';
@@ -31,9 +31,15 @@ export default function TabsLayout() {
         headerTintColor: colors.ink,
         headerStyle: { backgroundColor: colors.surface },
         headerTitleStyle: { fontWeight: '700' },
-        headerRight: () => <Brand side />,
+        headerLeft: () => (
+          <View style={{ paddingLeft: Platform.OS === 'web' ? 14 : 16 }}>
+            <Brand />
+          </View>
+        ),
+        headerRight: () => <LangSwitch />,
+        headerTitleAlign: 'left',
       }}>
-      <Tabs.Screen name="index" options={{ title: tr('Pradžia'), headerTitle: () => <Brand />, headerRight: () => <LangSwitch />, tabBarIcon: icon('home-outline') }} />
+      <Tabs.Screen name="index" options={{ title: tr('Pradžia'), headerTitle: '', tabBarIcon: icon('home-outline') }} />
       <Tabs.Screen name="search" options={{ title: tr('Paieška'), tabBarIcon: icon('search-outline') }} />
       <Tabs.Screen name="sell" options={{ title: tr('Parduoti'), tabBarIcon: icon('add-circle-outline') }} />
       <Tabs.Screen name="messages" options={{ title: tr('Žinutės'), tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `${tr('Žinutės, neskaitytų pokalbių:')} ${unread}` : tr('Žinutės') }} />

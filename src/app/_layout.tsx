@@ -1,10 +1,12 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
+import { Platform, View } from 'react-native';
 
 import { AuthLinkHandler } from '@/components/AuthLinkHandler';
 import { BackButton } from '@/components/BackButton';
 import { Brand } from '@/components/Brand';
+import { LangSwitch } from '@/components/LangSwitch';
 import { Splash } from '@/components/Splash';
 import { startLang, tr, useLang } from '@/i18n';
 import { StoreProvider } from '@/store';
@@ -23,8 +25,15 @@ export default function RootLayout() {
           headerTitleStyle: { fontWeight: '700' },
           contentStyle: { backgroundColor: colors.bg },
           headerBackVisible: false,
-          headerLeft: () => <BackButton />,
-          headerRight: () => <Brand side />,
+          // The logo and the language switch stay in the same place on every screen.
+          headerLeft: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: Platform.OS === 'web' ? 14 : 0 }}>
+              <Brand />
+              <BackButton />
+            </View>
+          ),
+          headerRight: () => <LangSwitch />,
+          headerTitleAlign: 'left',
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="listing/[id]" options={{ title: tr('Skelbimas') }} />

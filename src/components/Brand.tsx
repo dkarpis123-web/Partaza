@@ -11,10 +11,10 @@ const GLOW = '#F26A1B';
  * The Partaza logo and name in every header. The logo glows like an indicator light.
  * Pressing it always returns to the home screen.
  */
-export function Brand({ side = false }: { side?: boolean }) {
+export function Brand() {
   const router = useRouter();
   const [pulse] = useState(() => new Animated.Value(0));
-  const size = side ? 26 : 30;
+  const size = 28;
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -32,7 +32,7 @@ export function Brand({ side = false }: { side?: boolean }) {
       accessibilityRole="link"
       accessibilityLabel="Partaza – į pradžią"
       onPress={() => router.navigate('/')}
-      style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: side ? 14 : 0 }}>
+      style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 8 }}>
       <View style={{ width: size, height: size }}>
         <Animated.View
           style={{
@@ -43,7 +43,7 @@ export function Brand({ side = false }: { side?: boolean }) {
         />
         <Image source={require('../../assets/logo-mark.png')} style={{ width: size, height: size }} resizeMode="contain" accessible={false} />
       </View>
-      <Text style={{ fontSize: side ? 16 : 19, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 }}>Partaza</Text>
+      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 }}>Partaza</Text>
     </Pressable>
   );
 }

@@ -4,7 +4,6 @@ import React from 'react';
 import { Pressable } from 'react-native';
 
 import { colors } from '@/theme';
-import { Text } from '@/components/Text';
 
 /**
  * "Back" in the header of every inner screen. It is always shown: when the screen was
@@ -18,9 +17,8 @@ export function BackButton() {
       accessibilityRole="button"
       accessibilityLabel="Atgal"
       onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-      style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: 12, marginLeft: -4 }}>
-      <Ionicons name="chevron-back" size={24} color={colors.accent} />
-      <Text style={{ fontSize: 16, fontWeight: '600', color: colors.accent }}>Atgal</Text>
+      style={{ alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 36, marginRight: -8 }}>
+      <Ionicons name="chevron-back" size={28} color={colors.accent} />
     </Pressable>
   );
 }

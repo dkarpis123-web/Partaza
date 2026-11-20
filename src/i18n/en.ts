@@ -528,6 +528,8 @@ export const EN_PATTERNS: [RegExp, string | ((...groups: string[]) => string)][]
   [/^Perku už (.+?) €\. Susitarkime dėl apmokėjimo ir perdavimo\.$/, 'I am buying for €$1. Let us arrange payment and handover.'],
   [/^(Jūsų pasiūlymas|Gautas pasiūlymas): (.+)$/, (_, who, price) => `${part(who)}: ${price}`],
   [/^Nuotraukos \((\d+)\)$/, 'Photos ($1)'],
+  [/^Daugiausia (\d+) nuotraukų\. Norėdami pridėti kitą, vieną pašalinkite\.$/, 'At most $1 photos. Remove one to add another.'],
+  [/^Galite įkelti iki (\d+) nuotraukų – iš galerijos galima pažymėti kelias iš karto\.$/, 'You can upload up to $1 photos – several can be selected from the gallery at once.'],
   [/^Pašalinti nuotrauką:? (.+)$/, 'Remove photo $1'],
   [/^Kainos patarėjas: palyginome su (\d+) skelbim\S+ tuo pačiu numeriu mūsų rinkoje \((.+)–(.+), vidurinė kaina (.+)\)\.$/, (_, c, low, high, mid) => `Price advisor: compared with ${n(c, 'listing', 'listings')} with the same number on our marketplace (${low}–${high}, median price ${mid}).`],
   [/^Parduoti greitai · (.+)$/, 'Sell fast · $1'],

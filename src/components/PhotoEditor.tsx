@@ -6,7 +6,7 @@ import { Button, Muted } from '@/components/ui';
 import { colors, radius } from '@/theme';
 import { Text } from '@/components/Text';
 
-export const MAX_PHOTOS = 8;
+export const MAX_PHOTOS = 10;
 
 /** Thumbnails with a remove button on each, plus "take a photo" and "from gallery". */
 export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: (photos: string[]) => void }) {
@@ -23,8 +23,8 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
       const result =
         source === 'camera'
           ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-      if (!result.canceled) onChange([...photos, result.assets[0].uri].slice(0, MAX_PHOTOS));
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS - photos.length });
+      if (!result.canceled) onChange([...photos, ...result.assets.map((a) => a.uri)].slice(0, MAX_PHOTOS));
     } catch {
       setProblem('Nepavyko atidaryti kameros. Pasirinkite nuotrauką iš galerijos.');
     }
@@ -51,13 +51,14 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
         <Muted>Nuotraukų dar nėra.</Muted>
       )}
       {full ? (
-        <Muted>Daugiausia {MAX_PHOTOS} nuotraukos. Norėdami pridėti kitą, vieną pašalinkite.</Muted>
+        <Muted>Daugiausia {MAX_PHOTOS} nuotraukų. Norėdami pridėti kitą, vieną pašalinkite.</Muted>
       ) : (
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button label="Fotografuoti" kind="outline" onPress={() => add('camera')} style={{ flex: 1 }} />
           <Button label="Pridėti iš galerijos" kind="outline" onPress={() => add('library')} style={{ flex: 1 }} />
         </View>
       )}
+      {full ? null : <Muted>Galite įkelti iki {MAX_PHOTOS} nuotraukų – iš galerijos galima pažymėti kelias iš karto.</Muted>}
       {problem ? <Text style={{ fontSize: 13, color: colors.warn }}>{problem}</Text> : null}
     </View>
   );
