@@ -35,6 +35,11 @@ interface Store extends State {
   registerDemo: (name: string, kind: SellerKind, phone: string) => void;
   signUp: (email: string, password: string, name: string, kind: SellerKind, phone: string) => Result;
   setPhone: (phone: string) => Result;
+  /** Sends a link for choosing a new password. */
+  requestPasswordReset: (email: string) => Result;
+  changePassword: (password: string) => Result;
+  /** Finishes a link from an e-mail (confirmation or password reset) that brought the person back to the site. */
+  completeAuthLink: (hash: string) => Promise<{ kind: 'recovery' | 'signedIn' | 'error' | 'none'; message?: string }>;
   updatePhotos: (listingId: string, photos: string[]) => Result;
   signIn: (email: string, password: string) => Result;
   signOut: () => Result;
@@ -84,6 +89,7 @@ const ERRORS: Record<string, string> = {
   'Invalid login credentials': 'Neteisingas el. paštas arba slaptažodis.',
   'User already registered': ALREADY_REGISTERED,
   'Email not confirmed': 'El. paštas dar nepatvirtintas. Atidarykite laišką ir paspauskite nuorodą.',
+  'should be different': 'Naujas slaptažodis turi skirtis nuo senojo.',
   'rate limit': 'Per daug bandymų per trumpą laiką. Palaukite kelias minutes ir bandykite dar kartą.',
 };
 
@@ -234,6 +240,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const actions = useMemo(() => {
     const registerDemo: Store['registerDemo'] = (name, kind, phone) =>
       setState((s) => ({ ...s, registered: true, phone, me: { ...s.me, name, kind } }));
+
+    const requestPasswordReset: Store['requestPasswordReset'] = async (email) => {
+      if (!supabase) return 'Bandomuoju režimu slaptažodžių nėra.';
+      const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, origin ? { redirectTo: `${origin}/reset` } : undefined);
+      return error ? explain(error) : null;
+    };
+
+    const changePassword: Store['changePassword'] = async (password) => {
+      if (!supabase) return null;
+      const { error } = await supabase.auth.updateUser({ password });
+      return error ? explain(error) : null;
+    };
+
+    const completeAuthLink: Store['completeAuthLink'] = async (hash) => {
+      if (!supabase) return { kind: 'none' };
+      const params = new URLSearchParams(hash.replace(/^#/, ''));
+      if (params.get('error') || params.get('error_code')) {
+        return { kind: 'error', message: 'Nuoroda nebegalioja arba jau panaudota. Jei el. paštą jau patvirtinote, tiesiog prisijunkite.' };
+      }
+      const access = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (!access || !refreshToken) return { kind: 'none' };
+      const { error } = await supabase.auth.setSession({ access_token: access, refresh_token: refreshToken });
+      if (error) return { kind: 'error', message: explain(error) };
+      await refresh();
+      return { kind: params.get('type') === 'recovery' ? 'recovery' : 'signedIn' };
+    };
 
     const setPhone: Store['setPhone'] = async (phone) => {
       if (supabase) {
@@ -491,7 +525,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, setPhone, updatePhotos, signUp, signIn, signOut, setKind, addListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
   const value = useMemo<Store>(

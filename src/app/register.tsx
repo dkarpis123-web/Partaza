@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
@@ -15,8 +15,10 @@ const OPTIONS: { kind: SellerKind; title: string; text: string }[] = [
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { live, registerDemo, signUp, signIn } = useStore();
-  const [mode, setMode] = useState<'signUp' | 'signIn'>('signUp');
+  const params = useLocalSearchParams<{ notice?: string; mode?: string }>();
+  const { live, registerDemo, signUp, signIn, requestPasswordReset } = useStore();
+  const [mode, setMode] = useState<'signUp' | 'signIn'>(params.mode === 'signIn' ? 'signIn' : 'signUp');
+  const [info, setInfo] = useState(typeof params.notice === 'string' ? params.notice : '');
   const [kind, setKind] = useState<SellerKind>('private');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -50,7 +52,20 @@ export default function RegisterScreen() {
     router.back();
   };
 
-  const clear = () => setError('');
+  const clear = () => {
+    setError('');
+    setInfo('');
+  };
+
+  const forgot = async () => {
+    if (busy) return;
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Įrašykite el. pašto adresą, kuriuo registravotės.');
+    setBusy(true);
+    const problem = await requestPasswordReset(email.trim());
+    setBusy(false);
+    if (problem) return setError(problem);
+    setInfo(`Jei adresas ${email.trim()} užregistruotas, išsiuntėme laišką su nuoroda naujam slaptažodžiui. Nuoroda galioja trumpai.`);
+  };
 
   return (
     <Page footer={<Button label={busy ? 'Palaukite…' : isSignIn ? 'Prisijungti' : 'Tęsti'} onPress={submit} disabled={busy} />}>
@@ -88,6 +103,8 @@ export default function RegisterScreen() {
         </>
       ) : null}
       {error ? <Notice tone="warn">{error}</Notice> : null}
+      {info ? <Notice>{info}</Notice> : null}
+      {isSignIn ? <Button label="Pamiršau slaptažodį" kind="quiet" onPress={forgot} /> : null}
       {live ? (
         <Button
           label={isSignIn ? 'Neturiu paskyros – registruotis' : 'Jau turiu paskyrą – prisijungti'}

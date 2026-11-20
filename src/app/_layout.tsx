@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 
+import { AuthLinkHandler } from '@/components/AuthLinkHandler';
 import { Splash } from '@/components/Splash';
 import { StoreProvider } from '@/store';
 import { colors } from '@/theme';
@@ -25,7 +26,9 @@ export default function RootLayout() {
         <Stack.Screen name="sell/review" options={{ title: 'Patikrinkite skelbimą' }} />
         <Stack.Screen name="register" options={{ title: 'Registracija' }} />
         <Stack.Screen name="dashboard" options={{ title: 'Mano prekyba' }} />
+        <Stack.Screen name="reset" options={{ title: 'Slaptažodis' }} />
       </Stack>
+      <AuthLinkHandler />
       <Splash />
     </StoreProvider>
   );
