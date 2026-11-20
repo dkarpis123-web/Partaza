@@ -20,8 +20,11 @@ const mark = (nut, letter, bore) => {
   const depth = 46;
   let side = '';
   for (let i = depth; i >= 1; i -= 2) side += `<polygon points="${pts}" transform="translate(${(i * 0.55).toFixed(1)} ${i})" fill="#9A3A08" stroke="#9A3A08" stroke-width="44" stroke-linejoin="round"/>`;
+  let letterSide = '';
+  for (let i = 30; i >= 1; i -= 1) letterSide += `<text x="${(524 + i * 0.55).toFixed(1)}" y="${650 + i}" text-anchor="middle" font-family="SG" font-weight="700" font-size="340" fill="${i > 26 ? '#5E6670' : '#8B95A1'}">P</text>`;
   return `
   <defs>
+    <linearGradient id="pface" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E3E7EC"/></linearGradient>
     <linearGradient id="face" x1="0.15" y1="0" x2="0.85" y2="1"><stop offset="0" stop-color="#FFA35C"/><stop offset="0.45" stop-color="${nut}"/><stop offset="1" stop-color="#D9530C"/></linearGradient>
     <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7A2D05"/><stop offset="1" stop-color="#C24A0B"/></linearGradient>
     <radialGradient id="hole" cx="0.5" cy="0.45" r="0.6"><stop offset="0" stop-color="#262B32"/><stop offset="1" stop-color="${bore}"/></radialGradient>
@@ -35,8 +38,8 @@ const mark = (nut, letter, bore) => {
   <circle cx="512" cy="512" r="238" fill="url(#wall)"/>
   <g clip-path="url(#boreclip)"><circle cx="${512 + depth * 0.55}" cy="${512 + depth}" r="238" fill="url(#hole)"/></g>
   <circle cx="512" cy="512" r="238" fill="none" stroke="#FFC79B" stroke-opacity="0.5" stroke-width="5"/>
-  <text x="${538 + 6}" y="${662 + 8}" text-anchor="middle" font-family="SG" font-weight="700" font-size="340" fill="#000" opacity="0.5">P</text>
-  <text x="538" y="662" text-anchor="middle" font-family="SG" font-weight="700" font-size="340" fill="${letter}">P</text>`;
+  ${letterSide}
+  <text x="524" y="650" text-anchor="middle" font-family="SG" font-weight="700" font-size="340" fill="url(#pface)">P</text>`;
 };
 const svg = (bg, nut, letter, bore, scale, radius) => `<html><head><style>@font-face{font-family:SG;src:url(data:font/woff2;base64,${font}) format('woff2');font-weight:700}html,body{margin:0;background:transparent}</style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
