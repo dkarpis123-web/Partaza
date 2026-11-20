@@ -12,7 +12,7 @@ export const VEHICLE_LABELS: Record<VehicleType, string> = {
   car: 'Automobiliai',
   motorcycle: 'Motociklai',
   truck: 'Sunkvežimiai',
-  boat: 'Laivai',
+  boat: 'Vandens transportas',
   moped: 'Mopedai',
   scooter: 'Motoroleriai',
   kart: 'Kartingai',

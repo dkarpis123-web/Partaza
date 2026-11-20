@@ -4,6 +4,7 @@ import React from 'react';
 
 import { AuthLinkHandler } from '@/components/AuthLinkHandler';
 import { BackButton } from '@/components/BackButton';
+import { Brand } from '@/components/Brand';
 import { Splash } from '@/components/Splash';
 import { StoreProvider } from '@/store';
 import { colors } from '@/theme';
@@ -20,6 +21,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.bg },
           headerBackVisible: false,
           headerLeft: () => <BackButton />,
+          headerRight: () => <Brand side />,
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="listing/[id]" options={{ title: 'Skelbimas' }} />

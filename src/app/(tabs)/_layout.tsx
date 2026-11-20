@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import type { ColorValue } from 'react-native';
 
+import { Brand } from '@/components/Brand';
 import { useStore } from '@/store';
 import { colors } from '@/theme';
 
@@ -27,8 +28,9 @@ export default function TabsLayout() {
         headerTintColor: colors.ink,
         headerStyle: { backgroundColor: colors.surface },
         headerTitleStyle: { fontWeight: '700' },
+        headerRight: () => <Brand side />,
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Pradžia', headerTitle: 'Partaza', tabBarIcon: icon('home-outline') }} />
+      <Tabs.Screen name="index" options={{ title: 'Pradžia', headerTitle: () => <Brand />, headerRight: () => null, tabBarIcon: icon('home-outline') }} />
       <Tabs.Screen name="search" options={{ title: 'Paieška', tabBarIcon: icon('search-outline') }} />
       <Tabs.Screen name="sell" options={{ title: 'Parduoti', tabBarIcon: icon('add-circle-outline') }} />
       <Tabs.Screen name="messages" options={{ title: 'Žinutės', tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `Žinutės, neskaitytų pokalbių: ${unread}` : 'Žinutės' }} />
