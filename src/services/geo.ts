@@ -1,5 +1,7 @@
 // Countries and "where is this visitor". Listings store a two-letter country code (LT, LV…).
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import { useSyncExternalStore } from 'react';
 
 import { COUNTRY_NAMES } from '@/data/countries';
 import { getLang } from '@/i18n';
@@ -30,59 +32,81 @@ export function flagOf(code: string): string {
 
 export const countryLabel = (code: string) => `${flagOf(code)} ${countryName(code)}`.trim();
 
-const BY_ZONE: Record<string, string> = {
-  'Europe/Vilnius': 'LT', 'Europe/Riga': 'LV', 'Europe/Tallinn': 'EE', 'Europe/Warsaw': 'PL', 'Europe/Berlin': 'DE', 'Europe/Busingen': 'DE',
-  'Europe/Helsinki': 'FI', 'Europe/Stockholm': 'SE', 'Europe/Oslo': 'NO', 'Europe/Copenhagen': 'DK', 'Europe/London': 'GB', 'Europe/Dublin': 'IE',
-  'Europe/Amsterdam': 'NL', 'Europe/Brussels': 'BE', 'Europe/Paris': 'FR', 'Europe/Madrid': 'ES', 'Europe/Rome': 'IT', 'Europe/Vienna': 'AT',
-  'Europe/Prague': 'CZ', 'Europe/Kyiv': 'UA', 'Europe/Kiev': 'UA', 'Europe/Zurich': 'CH', 'Europe/Lisbon': 'PT', 'Europe/Budapest': 'HU',
-  'Europe/Bucharest': 'RO', 'Europe/Sofia': 'BG', 'Europe/Athens': 'GR', 'Europe/Bratislava': 'SK', 'Europe/Ljubljana': 'SI', 'Europe/Zagreb': 'HR',
-};
-
 export interface Place {
   country: string | null;
   city: string;
 }
 
-const KEY = 'partaza.place';
-let known: Place | null = null;
+export type Consent = 'unknown' | 'asking' | 'granted' | 'denied';
+interface GeoState {
+  consent: Consent;
+  place: Place | null;
+}
 
-/** First guess, available at once: the country of the device's time zone. Asks nothing and sends nothing. */
-export function detectCountry(): string | null {
-  if (known?.country) return known.country;
-  try {
-    return BY_ZONE[Intl.DateTimeFormat().resolvedOptions().timeZone] ?? null;
-  } catch {
-    return null;
+const KEY = 'partaza.geo';
+let state: GeoState = { consent: 'unknown', place: null };
+let loaded = false;
+const listeners = new Set<() => void>();
+const emit = (next: GeoState) => {
+  state = next;
+  listeners.forEach((l) => l());
+};
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  if (!loaded) {
+    loaded = true;
+    AsyncStorage.getItem(KEY)
+      .then((saved) => {
+        const parsed = saved ? (JSON.parse(saved) as GeoState) : null;
+        emit(parsed && (parsed.consent === 'granted' || parsed.consent === 'denied') ? parsed : { consent: 'asking', place: null });
+      })
+      .catch(() => emit({ consent: 'asking', place: null }));
   }
+  return () => listeners.delete(listener);
+};
+const SERVER: GeoState = { consent: 'unknown', place: null };
+
+/** The person's answer about location ('asking' = not answered yet) and, if allowed, where they are. */
+export function useGeo(): GeoState {
+  return useSyncExternalStore(subscribe, () => state, () => SERVER);
+}
+
+/** The country the person is in, or null if they have not allowed location. */
+export const detectCountry = (): string | null => state.place?.country ?? null;
+
+const save = (next: GeoState) => {
+  emit(next);
+  AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
+};
+
+export function declineLocation() {
+  save({ consent: 'denied', place: null });
 }
 
 /**
- * Better guess: the country and city of the network the visitor is connected from, as seen by our
- * web server. Nothing is stored on the server; the answer is kept on the device for next time.
+ * Asks the browser or phone for permission (its own prompt), then turns the rough position into a
+ * country and city on our server. The position itself is not stored anywhere.
  */
-export async function locate(): Promise<Place> {
-  if (known) return known;
+export async function allowLocation(): Promise<Place | null> {
   try {
-    const saved = await AsyncStorage.getItem(KEY);
-    if (saved) {
-      known = JSON.parse(saved) as Place;
-      return known;
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) {
+      declineLocation();
+      return null;
     }
-  } catch {
-    // fall through to asking the server
-  }
-  try {
+    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+    // Rounded to about a kilometre: enough for a city, not enough for an address.
+    const lat = position.coords.latitude.toFixed(2);
+    const lon = position.coords.longitude.toFixed(2);
     const base = typeof window !== 'undefined' && window.location?.origin?.startsWith('http') ? '' : 'https://partaza.eu';
-    const response = await fetch(`${base}/api/geo`);
+    const response = await fetch(`${base}/api/geo?lat=${lat}&lon=${lon}`);
     const data = await response.json();
     const country = typeof data.country === 'string' && COUNTRY_NAMES[data.country] ? data.country : null;
-    if (country) {
-      known = { country, city: typeof data.city === 'string' ? data.city : '' };
-      AsyncStorage.setItem(KEY, JSON.stringify(known)).catch(() => {});
-      return known;
-    }
+    const place = { country, city: typeof data.city === 'string' ? data.city : '' };
+    save({ consent: 'granted', place });
+    return place;
   } catch {
-    // offline or not on our server: keep the time-zone guess
+    declineLocation();
+    return null;
   }
-  return { country: detectCountry(), city: '' };
 }

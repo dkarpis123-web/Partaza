@@ -5,7 +5,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-n
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
-import { COUNTRIES, countryLabel, countryName, detectCountry, locate } from '@/services/geo';
+import { COUNTRIES, countryLabel, countryName, detectCountry, useGeo } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -83,16 +83,14 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [city, setCity] = useState(editing?.city ?? '');
   const [country, setCountry] = useState(() => editing?.country ?? detectCountry() ?? 'LT');
   const [countryFilter, setCountryFilter] = useState('');
-  // A new listing starts with the place the seller is connected from; they can change both.
-  const [placed, setPlaced] = useState(!!editing);
-  useEffect(() => {
-    if (placed) return;
-    locate().then((place) => {
-      setPlaced(true);
-      if (place.country) setCountry((c) => (c === (detectCountry() ?? 'LT') ? (place.country as string) : c));
-      if (place.city) setCity((c) => c || place.city);
-    });
-  }, [placed]);
+  // A new listing starts with the seller's own place, if they allowed location; they can change both.
+  const { place } = useGeo();
+  const [placedFrom, setPlacedFrom] = useState<string | null>(null);
+  if (!editing && place?.country && placedFrom !== place.country) {
+    setPlacedFrom(place.country);
+    setCountry(place.country);
+    if (place.city && !city) setCity(place.city);
+  }
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
   const [editCountry, setEditCountry] = useState(false);

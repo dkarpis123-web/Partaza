@@ -6,6 +6,7 @@ import { Platform, View } from 'react-native';
 import { AuthLinkHandler } from '@/components/AuthLinkHandler';
 import { BackButton } from '@/components/BackButton';
 import { Brand } from '@/components/Brand';
+import { FirstVisit } from '@/components/FirstVisit';
 import { HeaderRight } from '@/components/HeaderRight';
 import { Splash } from '@/components/Splash';
 import { startLang, tr, useLang } from '@/i18n';
@@ -71,6 +72,7 @@ export default function RootLayout() {
         <Stack.Screen name="terms" options={{ title: tr('Taisyklės') }} />
         <Stack.Screen name="privacy" options={{ title: tr('Privatumas') }} />
       </Stack>
+      <FirstVisit />
       <AuthLinkHandler />
       <Splash />
     </StoreProvider>

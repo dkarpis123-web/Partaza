@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
-import { countryLabel, countryName, detectCountry, locate } from '@/services/geo';
+import { countryLabel, countryName, useGeo } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
 import { newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
@@ -79,10 +79,7 @@ export default function SearchScreen() {
 
   const countries = useMemo(() => Array.from(new Set(listings.map((l) => l.country))).sort(), [listings]);
   // Once the listings are known, start in the visitor's own country if there is anything to show there.
-  const [home, setHome] = useState(detectCountry);
-  useEffect(() => {
-    locate().then((place) => setHome(place.country));
-  }, []);
+  const home = useGeo().place?.country ?? null;
   const [suggestedFor, setSuggestedFor] = useState<string | null | undefined>(undefined);
   const [editPlace, setEditPlace] = useState(false);
   if (countries.length > 0 && suggestedFor !== home) {

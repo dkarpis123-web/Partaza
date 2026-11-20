@@ -149,7 +149,7 @@ export const PRIVACY: LegalSection[] = [
   {
     title: '7. Duomenys jūsų įrenginyje',
     paragraphs: [
-      'Sekimo ir reklamos slapukų nenaudojame. Jūsų įrenginyje saugome tik tai, kas būtina veikimui: prisijungimo būseną, pasirinktą „mano automobilį“ ir informaciją, kuriuos pokalbius jau perskaitėte.',
+      'Sekimo ir reklamos slapukų nenaudojame. Jūsų įrenginyje saugome tik tai, kas būtina veikimui: prisijungimo būseną, pasirinktą „mano automobilį“ ir informaciją, kuriuos pokalbius jau perskaitėte, pasirinktą kalbą ir jūsų atsakymą dėl vietos naudojimo. Jeigu leidžiate naudoti vietą, pagal apytiksles (maždaug kilometro tikslumo) koordinates nustatome jūsų šalį ir miestą, kad rodytume dalis šalia jūsų; tam naudojama „OpenStreetMap“ paieškos paslauga „Nominatim“. Koordinačių nesaugome, o šalis ir miestas laikomi tik jūsų įrenginyje. DI įrankiams (dalies atpažinimui iš nuotraukų ir kainų paieškai) jūsų įkeltas dalies nuotraukas ir skelbimo duomenis apdoroja „Anthropic“.',
     ],
   },
   {

@@ -4,27 +4,31 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
-import { detectCountry } from '@/services/geo';
-
 import { EN, EN_PATTERNS } from './en';
 
 export type Lang = 'lt' | 'en';
 const KEY = 'partaza.lang';
 
-function detect(): Lang {
+/** The language of the device: what the app is shown in until the person chooses. */
+function deviceLang(): Lang {
+  const device = (typeof navigator !== 'undefined' && navigator.language) || Intl.DateTimeFormat().resolvedOptions().locale || 'lt';
+  return device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
+}
+
+function savedLang(): Lang | null {
   try {
     const saved = globalThis.localStorage?.getItem(KEY);
     if (saved === 'lt' || saved === 'en') return saved;
   } catch {
-    // storage unavailable: fall through to the device language
+    // storage unavailable
   }
-  // No saved choice: Lithuanian for people in Lithuania or with a Lithuanian device, English everywhere else.
-  const device = (typeof navigator !== 'undefined' && navigator.language) || Intl.DateTimeFormat().resolvedOptions().locale || 'lt';
-  return detectCountry() === 'LT' || device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
+  return null;
 }
 
-// The static web page is built in Lithuanian; the device language is applied once the app starts.
+// The static web page is built in Lithuanian; the real language is applied once the app starts.
 let current: Lang = 'lt';
+/** null while we do not know yet; false until the person has picked a language themselves. */
+let chosen: boolean | null = null;
 let started = false;
 const listeners = new Set<() => void>();
 
@@ -37,16 +41,25 @@ function apply(lang: Lang) {
 export function startLang() {
   if (started) return;
   started = true;
-  apply(detect());
+  const saved = savedLang();
+  if (saved) chosen = true;
+  apply(saved ?? deviceLang());
   // On phones there is no localStorage; the saved choice arrives a moment later.
   AsyncStorage.getItem(KEY)
-    .then((saved) => {
-      if ((saved === 'lt' || saved === 'en') && saved !== current) apply(saved);
+    .then((stored) => {
+      const valid = stored === 'lt' || stored === 'en';
+      chosen = valid;
+      apply(valid ? (stored as Lang) : current);
     })
-    .catch(() => {});
+    .catch(() => {
+      chosen = false;
+      apply(current);
+    });
 }
 
+/** The person's own choice: saved and used from now on. */
 export function setLang(lang: Lang) {
+  chosen = true;
   AsyncStorage.setItem(KEY, lang).catch(() => {
     // not saved; still applies for this visit
   });
@@ -54,6 +67,7 @@ export function setLang(lang: Lang) {
 }
 
 export const getLang = () => current;
+const getChosen = () => chosen;
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -61,6 +75,11 @@ const subscribe = (listener: () => void) => {
 };
 
 /** Re-renders the component when the language changes. */
+/** false while the person has not yet confirmed a language (null: not known yet). */
+export function useLangChosen(): boolean | null {
+  return useSyncExternalStore(subscribe, getChosen, () => null);
+}
+
 export function useLang(): Lang {
   return useSyncExternalStore(subscribe, getLang, () => 'lt' as Lang);
 }
