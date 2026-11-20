@@ -233,7 +233,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const emailRedirectTo = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind }, emailRedirectTo } });
       if (error) return explain(error);
-      if (!data.session) return 'Išsiuntėme laišką. Patvirtinkite el. pašto adresą ir tada prisijunkite.';
+      if (!data.session) return `Išsiuntėme laišką adresu ${email}. Paspauskite jame nuorodą ir tada prisijunkite. Jei adresas su klaida, registruokitės iš naujo teisingu adresu.`;
       await refresh();
       return null;
     };
