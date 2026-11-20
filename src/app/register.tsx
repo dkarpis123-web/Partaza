@@ -84,7 +84,7 @@ export default function RegisterScreen() {
         <>
           <Field label="El. paštas" value={email} onChangeText={(t) => { setEmail(t); clear(); }} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
           <Field label="Slaptažodis" value={password} onChangeText={(t) => { setPassword(t); clear(); }} secureTextEntry autoCapitalize="none" hint={isSignIn ? undefined : 'Bent 8 ženklai.'} />
-          {isSignIn ? null : <Muted>El. paštą reikės patvirtinti: atsiųsime laišką su nuoroda. Be patvirtinimo prisijungti negalima.</Muted>}
+          {isSignIn ? null : <Muted>El. paštą reikės patvirtinti per 15 minučių: atsiųsime laišką su nuoroda. Nepatvirtinta paskyra ištrinama savaime.</Muted>}
         </>
       ) : null}
       {error ? <Notice tone="warn">{error}</Notice> : null}

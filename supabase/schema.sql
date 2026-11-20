@@ -390,3 +390,35 @@ begin
 end;
 $$;
 revoke all on function public.handle_new_user() from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 0.4: nepatvirtintos paskyros ištrinamos savaime po 15 minučių
+-- ---------------------------------------------------------------------------
+
+create or replace function public.purge_unconfirmed_accounts()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_count integer;
+begin
+  delete from auth.users
+    where email_confirmed_at is null
+      and created_at < now() - interval '15 minutes';
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+revoke all on function public.purge_unconfirmed_accounts() from public, anon, authenticated;
+
+-- Paleidžiama kas minutę per „pg_cron“ (yra „Supabase“; vietiniuose bandymuose praleidžiama).
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+    execute 'create extension if not exists pg_cron';
+    execute $job$select cron.schedule('partaza-purge-unconfirmed', '* * * * *', 'select public.purge_unconfirmed_accounts()')$job$;
+  end if;
+end;
+$$;

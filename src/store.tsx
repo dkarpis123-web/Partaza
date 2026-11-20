@@ -292,7 +292,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // For an address that is already registered the server answers "success" without sending
       // anything (so strangers cannot probe addresses); the tell-tale is an empty identities list.
       if (!data.session && data.user && (data.user.identities ?? []).length === 0) return ALREADY_REGISTERED;
-      if (!data.session) return `Išsiuntėme laišką adresu ${email}. Paspauskite jame nuorodą ir tada prisijunkite. Jei adresas su klaida, registruokitės iš naujo teisingu adresu.`;
+      if (!data.session) return `Išsiuntėme laišką adresu ${email}. Per 15 minučių paspauskite jame nuorodą ir tada prisijunkite – nepatvirtinta paskyra po 15 minučių ištrinama. Jei adresas su klaida, registruokitės iš naujo teisingu adresu.`;
       await refresh();
       return null;
     };
