@@ -224,6 +224,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Chip label={pickCar ? 'Slėpti markių sąrašą' : 'Pasirinkti markę ir modelį iš sąrašo'} selected={pickCar} onPress={() => setPickCar((v) => !v)} />
         {pickCar ? (
           <CarPicker
+            type={vehicleType}
             picked={fitsList}
             onPick={(make, model) => {
               const item = `${make} ${model}`.trim();
