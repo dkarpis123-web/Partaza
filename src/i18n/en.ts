@@ -426,6 +426,18 @@ export const EN: Record<string, string> = {
   'Rodomos dažniausios markės. Kitą rasite įrašę kelias raides.': 'The most common makes are shown. Type a few letters to find another.',
   'Arba pasirinkite iš sąrašo:': 'Or pick from the list:',
 
+  'Įvertinkite pardavėją': 'Rate the seller',
+  'Įvertinkite pirkėją': 'Rate the buyer',
+  'Atsiliepimas (nebūtina): kaip sekėsi susitarti, ar dalis atitiko skelbimą…': 'Comment (optional): how the deal went, whether the part matched the listing…',
+  'Pateikti įvertinimą': 'Submit rating',
+  'Įvertinimas viešas ir matomas kitiems naudotojams. Pateikus jo pakeisti negalima.': 'The rating is public and visible to other users. It cannot be changed once submitted.',
+  'Pasirinkite, kiek žvaigždučių skiriate.': 'Choose how many stars you give.',
+  'Šį užsakymą jau įvertinote.': 'You have already rated this order.',
+  'Pasirinkite nuo 1 iki 5 žvaigždučių.': 'Choose from 1 to 5 stars.',
+  'iš 5': 'out of 5',
+  'kaip pardavėjas': 'as a seller',
+  'kaip pirkėjas': 'as a buyer',
+
   // Dashboard
   'Pajamos': 'Income',
   'Išlaidos': 'Costs',
@@ -617,6 +629,8 @@ export const EN_PATTERNS: [RegExp, string | ((...groups: string[]) => string)][]
   [/^Jei adresas (.+) užregistruotas, išsiuntėme laišką su nuoroda naujam slaptažodžiui\. Nuoroda galioja trumpai\.$/, 'If the address $1 is registered, we have sent a message with a link for a new password. The link is valid for a short time.'],
   [/^Užblokuoti naudotojai \((\d+)\)$/, 'Blocked users ($1)'],
   [/^Mano skelbimai \((\d+)\)$/, 'My listings ($1)'],
+  [/^Atsiliepimai \((\d+)\)$/, 'Reviews ($1)'],
+  [/^Jūsų įvertinimas: (.+)$/, 'Your rating: $1'],
   [/^Sekami pardavėjai \((\d+)\)$/, 'Sellers you follow ($1)'],
   [/^nauji: (\d+)$/, 'new: $1'],
   [/^Pardavėjo skelbimai \((\d+)\)$/, 'Seller’s listings ($1)'],

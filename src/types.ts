@@ -40,6 +40,20 @@ export interface User {
   logo?: string | null;
 }
 
+/** A rating one side of a completed order gave the other. Public. */
+export interface Review {
+  id: string;
+  orderKind: 'order' | 'payment';
+  orderId: string;
+  authorId: string;
+  subjectId: string;
+  /** Was the rated person the buyer or the seller in that order? */
+  subjectRole: 'buyer' | 'seller';
+  stars: number;
+  comment: string;
+  createdAt: number;
+}
+
 /** A search the person saved; new matching listings are pointed out to them. */
 export interface SavedSearch {
   id: string;

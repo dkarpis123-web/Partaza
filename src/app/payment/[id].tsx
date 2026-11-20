@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 
+import { ReviewBox } from '@/components/ReviewBox';
 import { Button, Card, Field, Muted, Notice, Page, Row } from '@/components/ui';
 import { type OrderStep, useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -178,6 +179,7 @@ export default function OrderScreen() {
 
       {error ? <Notice tone="warn">{error}</Notice> : null}
       <Button label={buyer ? 'Rašyti pardavėjui' : 'Žinutės'} kind="outline" onPress={chat} />
+      {order.status === 'completed' ? <ReviewBox kind="payment" orderId={order.id} subjectIsSeller={buyer} /> : null}
     </Page>
   );
 }

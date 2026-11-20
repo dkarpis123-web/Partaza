@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
+import { ReviewBox } from '@/components/ReviewBox';
 import { Button, Card, Heading, Muted, Notice, Page, Row } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -50,6 +51,7 @@ export default function OrdersScreen() {
         <Row label="Gavimas" value={order.shipping === null ? 'Atsiėmimas vietoje' : `Siuntimas, ${money(order.shipping)}`} />
         <Row label={iAmSeller ? 'Pirkėjas' : 'Pardavėjas'} value={other.name} />
         <Text style={{ fontSize: 14, lineHeight: 20, color: colors.ink, marginTop: 8 }}>{statusText(order, iAmSeller)}</Text>
+        {order.status === 'completed' ? <ReviewBox kind="order" orderId={order.id} subjectIsSeller={!iAmSeller} /> : null}
         <View style={{ gap: 8, marginTop: 10 }}>
           {iAmSeller && order.status === 'agreed' ? <Button label="Pažymėti: perdaviau arba išsiunčiau" disabled={waiting} onPress={() => act(order.id, 'hand')} /> : null}
           {!iAmSeller && OPEN.includes(order.status) ? <Button label="Patvirtinti, kad gavau" disabled={waiting} onPress={() => act(order.id, 'complete')} /> : null}

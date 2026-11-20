@@ -928,3 +928,66 @@ begin
   end if;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Reviews: after a completed order the buyer rates the seller and the seller rates the buyer.
+-- Public to read; written only through leave_review(), which checks the order.
+-- ---------------------------------------------------------------------------
+create table if not exists public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  order_kind text not null check (order_kind in ('order', 'payment')),
+  order_id uuid not null,
+  author_id uuid references public.profiles (id) on delete set null,
+  subject_id uuid not null references public.profiles (id) on delete cascade,
+  subject_role text not null check (subject_role in ('buyer', 'seller')),
+  stars smallint not null check (stars between 1 and 5),
+  comment text not null default '' check (char_length(comment) <= 1000),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists reviews_once_idx on public.reviews (order_kind, order_id, author_id);
+create index if not exists reviews_subject_idx on public.reviews (subject_id);
+grant select on public.reviews to anon, authenticated;
+alter table public.reviews enable row level security;
+drop policy if exists reviews_read on public.reviews;
+create policy reviews_read on public.reviews for select using (true);
+
+create or replace function public.leave_review(p_kind text, p_order uuid, p_stars integer, p_comment text)
+returns public.reviews
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me uuid := (select auth.uid());
+  v_buyer uuid;
+  v_seller uuid;
+  v_status text;
+  v_review public.reviews;
+begin
+  if v_me is null then
+    raise exception 'not_authenticated';
+  end if;
+  if p_stars is null or p_stars < 1 or p_stars > 5 then
+    raise exception 'bad_stars';
+  end if;
+  if p_kind = 'order' then
+    select buyer_id, seller_id, status into v_buyer, v_seller, v_status from public.orders where id = p_order;
+  elsif p_kind = 'payment' then
+    select buyer_id, seller_id, status into v_buyer, v_seller, v_status from public.payment_orders where id = p_order;
+  else
+    raise exception 'not_allowed';
+  end if;
+  if v_status is distinct from 'completed' or v_buyer is null or v_seller is null or v_me not in (v_buyer, v_seller) then
+    raise exception 'not_allowed';
+  end if;
+  insert into public.reviews (order_kind, order_id, author_id, subject_id, subject_role, stars, comment)
+  values (p_kind, p_order, v_me, case when v_me = v_buyer then v_seller else v_buyer end,
+          case when v_me = v_buyer then 'seller' else 'buyer' end, p_stars, left(coalesce(trim(p_comment), ''), 1000))
+  returning * into v_review;
+  return v_review;
+exception when unique_violation then
+  raise exception 'already_reviewed';
+end;
+$$;
+revoke all on function public.leave_review(text, uuid, integer, text) from public, anon;
+grant execute on function public.leave_review(text, uuid, integer, text) to authenticated;

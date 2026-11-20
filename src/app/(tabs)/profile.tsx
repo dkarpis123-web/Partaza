@@ -9,6 +9,7 @@ import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { normalizePhone } from '@/services/phone';
 import { STALE_DAYS, staleListings } from '@/services/stats';
+import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, money } from '@/theme';
 import { PAID_ORDER_LABELS } from '@/types';
@@ -16,6 +17,7 @@ import { Text } from '@/components/Text';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  useLang();
   const { me, registered, listings, live, phone, setPhone, setKind, setLogo, signOut, deleteAccount, reducePrice, favorites, following, orders, paidOrders, payReady, userById } = useStore();
   const openOrders = orders.filter((o) => o.status === 'agreed' || o.status === 'handed').length;
   const saved = listings.filter((l) => favorites.includes(l.id) && (l.status ?? 'active') === 'active');
@@ -54,7 +56,7 @@ export default function ProfileScreen() {
           <SellerLogo uri={me.logo} name={me.name} size={64} />
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.ink }}>{me.name}</Text>
-            <Muted>{me.kind === 'business' ? 'Verslo pardavėjas' : 'Privatus pardavėjas'} · atsiliepimų dar nėra</Muted>
+            <Muted>{`${tr(me.kind === 'business' ? 'Verslo pardavėjas' : 'Privatus pardavėjas')} · ${me.reviews > 0 ? `${me.rating.toFixed(1).replace('.', ',')} ${tr('iš 5')} (${me.reviews})` : tr('atsiliepimų dar nėra')}`}</Muted>
           </View>
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>

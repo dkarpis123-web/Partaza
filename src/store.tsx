@@ -6,7 +6,7 @@ import { seedListings, seedUsers } from '@/data/seed';
 import { getLang } from '@/i18n';
 import type { Recognition, WebPrices } from '@/services/ai';
 import { countryCode } from '@/services/geo';
-import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, SavedSearch, SellerKind, Thread, User } from '@/types';
+import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, Review, SavedSearch, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -31,6 +31,8 @@ interface State {
   /** Sellers the person follows. */
   following: string[];
   savedSearches: SavedSearch[];
+  /** Ratings of the people on screen, and the ones I wrote. */
+  reviews: Review[];
   /** Ids of people the signed-in person has blocked. Their listings and chats are hidden. */
   blocked: string[];
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
@@ -69,6 +71,8 @@ interface Store extends State {
   orderAction: (orderId: string, action: 'cancel' | 'hand' | 'complete') => Result;
   /** Saves or un-saves a listing. */
   toggleFavorite: (listingId: string) => Result;
+  /** Rates the other side of a completed order: once, 1–5 stars. */
+  leaveReview: (kind: 'order' | 'payment', orderId: string, stars: number, comment: string) => Result;
   /** Uploads the photos and asks the AI what part they show. Returns the uploaded photo links too. */
   aiRecognize: (photos: string[]) => Promise<{ photos: string[]; result?: Recognition; error?: string }>;
   /** Asks the AI to look up current asking prices for this part on public web pages. */
@@ -126,8 +130,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], orders: [], paidOrders: [], payReady: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], orders: [], paidOrders: [], payReady: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], reviews: [], orders: [], paidOrders: [], payReady: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], reviews: [], orders: [], paidOrders: [], payReady: [] };
 }
 
 let counter = 0;
@@ -146,6 +150,8 @@ const ERRORS: Record<string, string> = {
   not_authenticated: 'Pirmiausia prisijunkite.',
   own_listing: 'Savo skelbimo pirkti negalima.',
   not_allowed: 'Šio veiksmo dabar atlikti negalima.',
+  already_reviewed: 'Šį užsakymą jau įvertinote.',
+  bad_stars: 'Pasirinkite nuo 1 iki 5 žvaigždučių.',
   user_blocked: 'Šiam naudotojui rašyti negalite: vienas iš jūsų užblokavo kitą.',
   'row-level security': 'Šis veiksmas neleidžiamas. Jei rašote kitam naudotojui, gali būti, kad vienas iš jūsų užblokavo kitą.',
   phone_required: 'Įrašykite telefono numerį, pvz., +37061234567.',
@@ -170,6 +176,20 @@ type Row = Record<string, any>;
 function toUser(row: Row): User {
   const year = row.created_at ? new Date(row.created_at).getFullYear() : '';
   return { id: row.id, name: row.name, kind: row.kind === 'business' ? 'business' : 'private', rating: 0, reviews: 0, since: year ? `${year} m.` : '', logo: row.logo_url ?? null };
+}
+
+function toReview(row: Row): Review {
+  return {
+    id: row.id, orderKind: row.order_kind, orderId: row.order_id, authorId: row.author_id ?? '', subjectId: row.subject_id,
+    subjectRole: row.subject_role, stars: Number(row.stars), comment: row.comment ?? '', createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+/** Fills in a person's average rating from the reviews about them. */
+function rated(user: User, reviews: Review[]): User {
+  const about = reviews.filter((r) => r.subjectId === user.id);
+  if (about.length === 0) return { ...user, rating: 0, reviews: 0 };
+  return { ...user, rating: about.reduce((sum, r) => sum + r.stars, 0) / about.length, reviews: about.length };
 }
 
 function toListing(row: Row): Listing {
@@ -379,10 +399,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
     if (uid) ids.add(uid);
     const profilesRes = ids.size > 0 ? await supabase.from('profiles').select('*').in('id', [...ids]) : { data: [] as Row[] };
-    const users = (profilesRes.data ?? []).map(toUser);
+    const reviewRows: Row[] = [];
+    if (ids.size > 0) {
+      const about = await supabase.from('reviews').select('*').in('subject_id', [...ids]).order('created_at', { ascending: false }).limit(1000);
+      reviewRows.push(...(about.data ?? []));
+    }
+    if (uid) {
+      const written = await supabase.from('reviews').select('*').eq('author_id', uid);
+      (written.data ?? []).forEach((r: Row) => reviewRows.some((x) => x.id === r.id) || reviewRows.push(r));
+    }
+    const reviews = reviewRows.map(toReview);
+    const users = (profilesRes.data ?? []).map(toUser).map((u) => rated(u, reviews));
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, following, savedSearches, orders, paidOrders, payReady });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, following, savedSearches, reviews, orders, paidOrders, payReady });
   }, []);
 
   useEffect(() => {
@@ -518,6 +548,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (error) return explain(error);
       }
       setState((s) => ({ ...s, favorites: saved ? s.favorites.filter((id) => id !== listingId) : [...s.favorites, listingId] }));
+      return null;
+    };
+
+    const leaveReview: Store['leaveReview'] = async (kind, orderId, starCount, comment) => {
+      const { me, orders, paidOrders } = stateRef.current;
+      let review: Review;
+      if (supabase) {
+        const { data, error } = await supabase.rpc('leave_review', { p_kind: kind, p_order: orderId, p_stars: starCount, p_comment: comment });
+        if (error || !data) return explain(error ?? { message: '' });
+        review = toReview(data);
+      } else {
+        const order = kind === 'order' ? orders.find((o) => o.id === orderId) : paidOrders.find((o) => o.id === orderId);
+        if (!order) return ERRORS.not_allowed;
+        const iAmBuyer = order.buyerId === me.id;
+        review = {
+          id: newId('r'), orderKind: kind, orderId, authorId: me.id, subjectId: iAmBuyer ? order.sellerId : order.buyerId,
+          subjectRole: iAmBuyer ? 'seller' : 'buyer', stars: starCount, comment, createdAt: Date.now(),
+        };
+      }
+      setState((s) => {
+        const reviews = [review, ...s.reviews];
+        return { ...s, reviews, users: s.users.map((u) => (u.id === review.subjectId ? rated(u, reviews) : u)) };
+      });
       return null;
     };
 
@@ -960,7 +1013,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, aiRecognize, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, aiRecognize, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(
