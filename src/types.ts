@@ -68,7 +68,7 @@ export interface Listing {
   /** A whole vehicle sold for parts in one listing, instead of a single part. */
   wholeVehicle?: boolean;
   /** 'sold' listings are hidden from buyers and counted in the seller's dashboard. */
-  status?: 'active' | 'sold';
+  status?: 'active' | 'reserved' | 'sold';
   /* The fields below are private: only the seller ever receives them. */
   /** Dismantled vehicle this part came from, if any. */
   donorId?: string | null;
@@ -83,6 +83,26 @@ export interface MyCar {
   model: string;
   vin: string;
   year: number | null;
+}
+
+export type OrderStatus = 'agreed' | 'handed' | 'completed' | 'cancelled';
+
+/**
+ * A confirmed purchase. Payments through the platform are not switched on yet, so an order
+ * records who buys what and for how much; the two people arrange payment themselves.
+ */
+export interface Order {
+  id: string;
+  listingId: string | null;
+  threadId: string | null;
+  buyerId: string;
+  sellerId: string;
+  title: string;
+  photo: string | null;
+  price: number;
+  shipping: number | null;
+  status: OrderStatus;
+  createdAt: number;
 }
 
 /** A vehicle the seller bought to dismantle. Private to the seller. */

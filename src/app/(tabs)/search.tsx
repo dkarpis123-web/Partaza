@@ -84,7 +84,7 @@ export default function SearchScreen() {
       if (onlyClassic && !l.classic) return false;
       if (onlyWhole && !l.wholeVehicle) return false;
       if (onlyMyCar && myCar && !fitsCar(`${l.fits} ${l.title}`, myCar.make, myCar.model)) return false;
-      if (l.status === 'sold') return false;
+      if ((l.status ?? 'active') !== 'active') return false;
       const deliverable = l.shipping !== null;
       if (!((delivery && deliverable) || (pickup && l.pickup))) return false;
       return true;

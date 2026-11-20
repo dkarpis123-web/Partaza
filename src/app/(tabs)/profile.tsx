@@ -12,8 +12,9 @@ import { MAX_WIDTH, colors, money } from '@/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites } = useStore();
-  const saved = listings.filter((l) => favorites.includes(l.id) && l.status !== 'sold');
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, orders } = useStore();
+  const openOrders = orders.filter((o) => o.status === 'agreed' || o.status === 'handed').length;
+  const saved = listings.filter((l) => favorites.includes(l.id) && (l.status ?? 'active') === 'active');
   const [now] = useState(() => Date.now());
   const stale = staleListings(listings, me.id, now);
   const [phoneText, setPhoneText] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export default function ProfileScreen() {
 
       <BlockedUsers />
 
+      <Button label={openOrders > 0 ? `Užsakymai (${openOrders} vykdomi)` : 'Užsakymai'} kind="outline" onPress={() => router.push('/orders')} />
       <Button label="Mano prekyba: pajamos, išlaidos, pelnas" kind="dark" onPress={() => router.push('/dashboard')} />
 
       {stale.length > 0 ? (

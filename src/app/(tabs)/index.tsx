@@ -19,7 +19,7 @@ export default function HomeScreen() {
   const [type, setType] = useState<VehicleType | null>(null);
 
   const shown = [...listings]
-    .filter((l) => l.status !== 'sold' && (type ? l.vehicleType === type : true))
+    .filter((l) => (l.status ?? 'active') === 'active' && (type ? l.vehicleType === type : true))
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 12);
 

@@ -572,3 +572,153 @@ alter table public.favorites enable row level security;
 drop policy if exists favorites_own on public.favorites;
 create policy favorites_own on public.favorites for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- ---------------------------------------------------------------------------
+-- 0.7: užsakymai (susitarimas pirkti). Mokėjimai per platformą dar neįjungti:
+-- užsakymas fiksuoja, kas, ką ir už kiek perka; apmokėjimą šalys kol kas derina pačios.
+-- ---------------------------------------------------------------------------
+
+alter table public.listings drop constraint if exists listings_status_check;
+alter table public.listings add constraint listings_status_check
+  check (status in ('active', 'reserved', 'sold', 'hidden'));
+
+-- Skelbimą mato visi, kol jis aktyvus; pardavėjas visada; pirkėjas, kuris dėl jo jau rašė,
+-- ir toliau (kad pokalbis ir užsakymas neliktų be skelbimo, kai jis rezervuotas ar parduotas).
+create or replace function public.has_thread_on(p_listing uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.threads t where t.listing_id = p_listing and t.buyer_id = (select auth.uid()));
+$$;
+revoke all on function public.has_thread_on(uuid) from public;
+grant execute on function public.has_thread_on(uuid) to anon, authenticated;
+
+drop policy if exists listings_read on public.listings;
+create policy listings_read on public.listings for select
+  using (status = 'active' or seller_id = (select auth.uid()) or public.has_thread_on(id));
+
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid references public.listings (id) on delete set null,
+  thread_id uuid references public.threads (id) on delete set null,
+  buyer_id uuid references public.profiles (id) on delete set null,
+  seller_id uuid references public.profiles (id) on delete set null,
+  title text not null,
+  photo text,
+  price numeric(10, 2) not null check (price > 0),
+  shipping numeric(10, 2),
+  status text not null default 'agreed' check (status in ('agreed', 'handed', 'completed', 'cancelled')),
+  created_at timestamptz not null default now(),
+  handed_at timestamptz,
+  completed_at timestamptz,
+  cancelled_at timestamptz
+);
+-- Vienam skelbimui – tik vienas neužbaigtas užsakymas.
+create unique index if not exists orders_open_listing_idx on public.orders (listing_id) where status in ('agreed', 'handed');
+create index if not exists orders_buyer_idx on public.orders (buyer_id);
+create index if not exists orders_seller_idx on public.orders (seller_id);
+
+grant select on public.orders to authenticated;
+alter table public.orders enable row level security;
+drop policy if exists orders_read on public.orders;
+create policy orders_read on public.orders for select to authenticated
+  using ((select auth.uid()) in (buyer_id, seller_id));
+
+-- Pirkėjas patvirtina pirkimą. Kaina – paskutinis priimtas pasiūlymas tame pokalbyje, o jei jo nėra – skelbimo kaina.
+create or replace function public.create_order(p_listing uuid)
+returns public.orders
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me uuid := (select auth.uid());
+  v_listing public.listings;
+  v_thread uuid;
+  v_price numeric;
+  v_order public.orders;
+begin
+  if v_me is null then
+    raise exception 'not_authenticated';
+  end if;
+  select * into v_listing from public.listings where id = p_listing for update;
+  if not found or v_listing.status <> 'active' then
+    raise exception 'listing_not_active';
+  end if;
+  if v_listing.seller_id = v_me then
+    raise exception 'own_listing';
+  end if;
+  if public.blocked_with(v_listing.seller_id) then
+    raise exception 'user_blocked';
+  end if;
+
+  select id into v_thread from public.threads where listing_id = p_listing and buyer_id = v_me;
+  if v_thread is null then
+    insert into public.threads (listing_id, buyer_id, seller_id) values (p_listing, v_me, v_listing.seller_id) returning id into v_thread;
+  end if;
+
+  select m.amount into v_price from public.messages m
+    where m.thread_id = v_thread and m.kind = 'offer' and m.status = 'accepted'
+    order by m.created_at desc limit 1;
+  v_price := coalesce(v_price, v_listing.price);
+
+  insert into public.orders (listing_id, thread_id, buyer_id, seller_id, title, photo, price, shipping)
+  values (p_listing, v_thread, v_me, v_listing.seller_id, v_listing.title, v_listing.photos[1], v_price, v_listing.shipping)
+  returning * into v_order;
+
+  update public.listings set status = 'reserved' where id = p_listing;
+
+  insert into public.messages (thread_id, sender_id, kind, body)
+  values (v_thread, v_me, 'text', 'Perku už ' || trim(to_char(v_price, 'FM999999990.00')) || ' €. Susitarkime dėl apmokėjimo ir perdavimo.');
+
+  return v_order;
+end;
+$$;
+
+-- Užsakymo veiksmai: cancel (abi pusės, kol nesusitarta daugiau), hand (pardavėjas perdavė ar išsiuntė),
+-- complete (pirkėjas gavo). Užbaigus skelbimas pažymimas parduotu ir suma įrašoma į pardavėjo apskaitą.
+create or replace function public.order_action(p_order uuid, p_action text)
+returns public.orders
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me uuid := (select auth.uid());
+  v_order public.orders;
+begin
+  if v_me is null then
+    raise exception 'not_authenticated';
+  end if;
+  select * into v_order from public.orders where id = p_order for update;
+  if not found or v_me not in (v_order.buyer_id, v_order.seller_id) then
+    raise exception 'not_a_participant';
+  end if;
+
+  if p_action = 'cancel' and v_order.status = 'agreed' then
+    update public.orders set status = 'cancelled', cancelled_at = now() where id = p_order returning * into v_order;
+    update public.listings set status = 'active' where id = v_order.listing_id and status = 'reserved';
+  elsif p_action = 'hand' and v_order.status = 'agreed' and v_me = v_order.seller_id then
+    update public.orders set status = 'handed', handed_at = now() where id = p_order returning * into v_order;
+  elsif p_action = 'complete' and v_order.status in ('agreed', 'handed') and v_me = v_order.buyer_id then
+    update public.orders set status = 'completed', completed_at = now() where id = p_order returning * into v_order;
+    update public.listings set status = 'sold' where id = v_order.listing_id;
+    if v_order.listing_id is not null and v_order.seller_id is not null then
+      insert into public.listing_finance (listing_id, seller_id, sold_price, sold_at)
+      values (v_order.listing_id, v_order.seller_id, v_order.price, now())
+      on conflict (listing_id) do update set sold_price = excluded.sold_price, sold_at = excluded.sold_at;
+    end if;
+  else
+    raise exception 'not_allowed';
+  end if;
+  return v_order;
+end;
+$$;
+
+revoke all on function public.create_order(uuid) from public, anon;
+revoke all on function public.order_action(uuid, text) from public, anon;
+grant execute on function public.create_order(uuid) to authenticated;
+grant execute on function public.order_action(uuid, text) to authenticated;
