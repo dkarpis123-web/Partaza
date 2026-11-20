@@ -891,3 +891,40 @@ begin
   end if;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- AI helpers (the "ai" edge function): how many calls each user made today.
+-- ---------------------------------------------------------------------------
+create table if not exists public.ai_usage (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  day date not null default current_date,
+  calls integer not null default 0,
+  primary key (user_id, day)
+);
+alter table public.ai_usage enable row level security;
+revoke all on public.ai_usage from anon, authenticated;
+
+-- Counts one call; returns false when the user has reached today's limit. Only the edge function may call it.
+create or replace function public.ai_use(p_user uuid, p_limit integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_calls integer;
+begin
+  insert into public.ai_usage (user_id, day, calls) values (p_user, current_date, 1)
+  on conflict (user_id, day) do update set calls = public.ai_usage.calls + 1
+  returning calls into v_calls;
+  return v_calls <= p_limit;
+end;
+$$;
+revoke all on function public.ai_use(uuid, integer) from public, anon, authenticated;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.ai_use(uuid, integer) to service_role;
+  end if;
+end;
+$$;

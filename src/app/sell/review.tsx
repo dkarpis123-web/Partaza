@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-native';
 
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
-import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
+import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
 import { COUNTRIES, countryLabel, countryName, detectCountry, locate } from '@/services/geo';
-import { useLang } from '@/i18n';
+import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -52,7 +52,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   useLang();
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; donor?: string; whole?: string }>();
-  const { listings, donors, registered, phone, addListing, updateListing } = useStore();
+  const { listings, donors, registered, phone, addListing, updateListing, live, ready, aiRecognize, aiPrices } = useStore();
   const whole = editing ? !!editing.wholeVehicle : params.whole === '1';
   const donor = donors.find((d) => d.id === (editing ? editing.donorId : params.donor));
 
@@ -101,24 +101,56 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [costText, setCostText] = useState(editing?.cost != null ? toText(editing.cost) : '');
   const [error, setError] = useState('');
   const [publishing, setPublishing] = useState(false);
+  /** 'ok' | 'unsure' | an error text: how the AI recognition went. */
+  const [aiNote, setAiNote] = useState('');
+  const [webPrices, setWebPrices] = useState<WebPrices | null>(null);
+  const [webBusy, setWebBusy] = useState(false);
+  const [webProblem, setWebProblem] = useState('');
+  const searchWeb = async () => {
+    if (webBusy) return;
+    setWebBusy(true);
+    setWebProblem('');
+    const answer = await aiPrices({ title: title.trim(), oem: oem.trim(), fits: fits.trim(), condition, defects: defects.length > 0, country });
+    setWebBusy(false);
+    setWebPrices(answer.prices ?? null);
+    setWebProblem(answer.error ?? '');
+  };
 
   useEffect(() => {
     if (editing || whole) return; // An existing listing already has its fields; a whole vehicle is described by the seller.
+    if (!ready) return; // Wait until we know whether the person is signed in.
     let active = true;
-    recognizePart(initialPhotos).then((r) => {
-      if (!active) return;
+    const fill = (r: Recognition) => {
       setTitle(r.title);
       setOem(r.oem);
       setFits(r.fits);
       setVehicleType(r.vehicleType);
       setDefects(r.suggestedDefects);
       setIsDemo(r.isDemo);
-      setLoading(false);
-    });
+    };
+    if (!live) {
+      recognizePart(initialPhotos).then((r) => {
+        if (!active) return;
+        fill(r);
+        setLoading(false);
+      });
+    } else if (registered && initialPhotos.length > 0) {
+      // The real thing: the photos are uploaded and the AI describes the part.
+      aiRecognize(initialPhotos).then((answer) => {
+        if (!active) return;
+        setPhotos(answer.photos);
+        if (answer.result) fill(answer.result);
+        setAiNote(answer.result ? (answer.result.title ? 'ok' : 'unsure') : answer.error ?? 'failed');
+        setLoading(false);
+      });
+    } else {
+      Promise.resolve().then(() => active && setLoading(false));
+    }
     return () => {
       active = false;
     };
-  }, [initialPhotos, editing, whole]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPhotos, editing, whole, live, registered, ready]);
 
   const advice = useMemo(() => priceAdviceFromMarket(oem, editing ? listings.filter((l) => l.id !== editing.id) : listings, defects.length > 0), [oem, listings, defects.length, editing]);
   const price = parsePrice(priceText);
@@ -171,6 +203,10 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     <Page footer={<Button label={publishing ? 'Saugoma…' : editing ? 'Išsaugoti pakeitimus' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} />}>
       {isDemo ? (
         <Notice tone="warn">Bandomoji versija: dalies atpažinimas dar neprijungtas, todėl laukai užpildyti pavyzdžiu. Pataisykite juos pagal savo dalį.</Notice>
+      ) : aiNote && aiNote !== 'ok' ? (
+        <Notice tone="warn">{aiNote === 'unsure' ? 'DI nuotraukose dalies neatpažino. Užpildykite laukus patys.' : `${tr('Dalies atpažinti nepavyko, užpildykite laukus patys.')} ${tr(aiNote)}`}</Notice>
+      ) : live && !editing && !whole && aiNote !== 'ok' ? (
+        <Muted>Užpildykite skelbimo laukus. Įdėjus nuotraukas prieš šį žingsnį, DI juos užpildo pats.</Muted>
       ) : (
         <Muted>{editing ? 'Keičiate paskelbtą skelbimą. Pakeitimus pirkėjai pamatys iškart.' : whole ? 'Visas automobilis dalims: aprašykite, kas veikia, kas pažeista ir ko trūksta. Pirkėjas automobilį pasiima pats.' : 'Užpildėme pagal jūsų nuotraukas. Peržiūrėkite ir pataisykite, jei ką supratome ne taip.'}</Muted>
       )}
@@ -254,11 +290,32 @@ function ReviewForm({ editing }: { editing?: Listing }) {
                 {money(c.price)} · {c.title} · {CONDITION_LABELS[c.condition].toLowerCase()}{c.defects > 0 ? ', su defektais' : ''} · {c.place}
               </Text>
             ))}
-            <Muted>Kol kas lyginame tik su mūsų rinkos skelbimais. Palyginimas su kitų šalių viešomis kainomis bus pridėtas vėliau.</Muted>
           </View>
         ) : (
-          <Muted>Kainos patarėjas pasiūlys kainą, kai rinkoje bus dalių su tokiu pačiu numeriu.</Muted>
+          <Muted>Mūsų rinkoje dalių su tokiu pačiu numeriu dar nėra, todėl palyginti nėra su kuo.</Muted>
         )}
+        {live && registered ? (
+          <View style={{ gap: 8 }}>
+            <Button label={webBusy ? 'Ieškoma kainų internete…' : 'Ieškoti kainų internete (DI)'} kind="outline" disabled={webBusy} onPress={searchWeb} />
+            {webBusy ? <Muted>Tai užtrunka apie pusę minutės.</Muted> : null}
+            {webProblem ? <Notice tone="warn">{webProblem}</Notice> : null}
+            {webPrices && !webPrices.found ? <Muted>{`${tr('Internete šios dalies kainų neradome.')} ${webPrices.note}`}</Muted> : null}
+            {webPrices?.found ? (
+              <View style={{ gap: 8 }}>
+                <Notice>{`${tr('Internete panašios dalys siūlomos už')} ${money(webPrices.low ?? 0)}–${money(webPrices.high ?? 0)}, ${tr('dažniausiai apie')} ${money(webPrices.typical ?? 0)}. ${webPrices.note}`}</Notice>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <Chip label={`${tr('Naudoti')} ${money(Math.round(webPrices.typical ?? 0))}`} selected={price === Math.round(webPrices.typical ?? 0)} onPress={() => setPriceText(String(Math.round(webPrices.typical ?? 0)))} />
+                </View>
+                {webPrices.sources.map((s) => (
+                  <Pressable key={s.url} accessibilityRole="link" onPress={() => Linking.openURL(s.url)} style={{ minHeight: 32, justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 13, color: colors.accent, textDecorationLine: 'underline' }}>{`${s.price ? `${money(s.price)} · ` : ''}${s.title || s.url}`}</Text>
+                  </Pressable>
+                ))}
+                <Muted>Kainas iš viešų puslapių surinko DI; jos gali būti netikslios. Prieš remdamiesi atsidarykite šaltinį.</Muted>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         <Field label="Kaina, €" value={priceText} onChangeText={setPriceText} keyboardType="decimal-pad" placeholder="0,00" />
         {donor ? (
           <Muted>Dalis iš automobilio „{donor.name}“. Išlaidos skaičiuojamos pagal automobilio kainą ({money(donor.cost)}).</Muted>

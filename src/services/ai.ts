@@ -30,6 +30,17 @@ export async function recognizePart(photoUris: string[]): Promise<Recognition> {
   };
 }
 
+/** Asking prices found on public web pages by the AI price search. */
+export interface WebPrices {
+  found: boolean;
+  low?: number;
+  typical?: number;
+  high?: number;
+  /** What the prices refer to and how sure the search is. */
+  note: string;
+  sources: { title: string; url: string; price: number | null }[];
+}
+
 export interface Comparable {
   id: string;
   title: string;

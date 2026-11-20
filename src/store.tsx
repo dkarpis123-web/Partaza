@@ -3,6 +3,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
+import { getLang } from '@/i18n';
+import type { Recognition, WebPrices } from '@/services/ai';
 import { countryCode } from '@/services/geo';
 import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, SavedSearch, SellerKind, Thread, User } from '@/types';
 
@@ -67,6 +69,10 @@ interface Store extends State {
   orderAction: (orderId: string, action: 'cancel' | 'hand' | 'complete') => Result;
   /** Saves or un-saves a listing. */
   toggleFavorite: (listingId: string) => Result;
+  /** Uploads the photos and asks the AI what part they show. Returns the uploaded photo links too. */
+  aiRecognize: (photos: string[]) => Promise<{ photos: string[]; result?: Recognition; error?: string }>;
+  /** Asks the AI to look up current asking prices for this part on public web pages. */
+  aiPrices: (part: { title: string; oem: string; fits: string; condition: string; defects: boolean; country: string }) => Promise<{ prices?: WebPrices; error?: string }>;
   /** Follows or unfollows a seller. */
   toggleFollow: (sellerId: string) => Result;
   saveSearch: (search: Omit<SavedSearch, 'id' | 'seenAt'>) => Result;
@@ -233,6 +239,15 @@ const PAY_ERRORS: Record<string, string> = {
 };
 
 /** Calls the server's payment function. Resolves to its answer, or to a message for the user. */
+const AI_ERRORS: Record<string, string> = {
+  not_authenticated: 'DI įrankiai veikia tik prisijungus.',
+  not_configured: 'DI įrankiai dar neįjungti.',
+  daily_limit: 'Šiandien DI įrankių limitas išnaudotas. Bandykite rytoj.',
+  no_photos: 'Atpažinimui reikia bent vienos nuotraukos.',
+  nothing_to_search: 'Kainų paieškai įrašykite pavadinimą arba dalies numerį.',
+  ai_error: 'DI įrankis atsakė klaida. Bandykite dar kartą po minutės.',
+};
+
 async function pay(body: Row): Promise<{ data?: Row; error?: string }> {
   if (!supabase) return { error: 'Bandomuoju režimu mokėjimų nėra.' };
   try {
@@ -548,6 +563,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       setState((s) => ({ ...s, savedSearches: s.savedSearches.map((x) => (x.id === id ? { ...x, seenAt: now } : x)) }));
       if (supabase) supabase.from('saved_searches').update({ seen_at: new Date(now).toISOString() }).eq('id', id).then(() => {});
+    };
+
+    const askAi = async (body: Row): Promise<{ data?: Row; error?: string }> => {
+      if (!supabase) return { error: 'Bandomuoju režimu DI įrankiai neveikia.' };
+      try {
+        const { data, error } = await supabase.functions.invoke('ai', { body: { ...body, lang: getLang() } });
+        if (error || !data) return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+        if (data.error) return { error: AI_ERRORS[data.error] ?? AI_ERRORS.ai_error };
+        return { data };
+      } catch {
+        return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+      }
+    };
+
+    const aiRecognize: Store['aiRecognize'] = async (photos) => {
+      const { me } = stateRef.current;
+      const uploaded = await uploadPhotos(photos, me.id);
+      if (!uploaded.urls) return { photos, error: uploaded.error };
+      const { data, error } = await askAi({ action: 'recognize', photos: uploaded.urls });
+      if (!data) return { photos: uploaded.urls, error };
+      return {
+        photos: uploaded.urls,
+        result: { title: data.title ?? '', oem: data.oem ?? '', fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false },
+      };
+    };
+
+    const aiPrices: Store['aiPrices'] = async (part) => {
+      const { data, error } = await askAi({ action: 'price', ...part });
+      if (!data) return { error };
+      return { prices: { found: data.found === true, low: data.low, typical: data.typical, high: data.high, note: data.note ?? '', sources: data.sources ?? [] } };
     };
 
     const blockUser: Store['blockUser'] = async (userId) => {
@@ -915,7 +960,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, aiRecognize, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(
