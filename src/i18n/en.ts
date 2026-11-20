@@ -410,6 +410,16 @@ export const EN: Record<string, string> = {
   'DI įrankis atsakė klaida. Bandykite dar kartą po minutės.': 'The AI tool returned an error. Try again in a minute.',
   'Bandomuoju režimu DI įrankiai neveikia.': 'AI tools do not work in demo mode.',
 
+  'Pasirinkti markę ir modelį iš sąrašo': 'Pick make and model from a list',
+  'Slėpti markių sąrašą': 'Hide the list of makes',
+  'Ieškoti markės, pvz., Volvo': 'Find a make, e.g. Volvo',
+  'Ieškoti modelio': 'Find a model',
+  'Kita markė': 'Another make',
+  'Tokios markės sąraše nėra. Įrašykite ją patys laukelyje aukščiau.': 'That make is not in the list. Type it yourself in the field above.',
+  'Tokio modelio sąraše nėra. Įrašykite jį patys laukelyje aukščiau.': 'That model is not in the list. Type it yourself in the field above.',
+  'Rodomos dažniausios markės. Kitą rasite įrašę kelias raides.': 'The most common makes are shown. Type a few letters to find another.',
+  'Arba pasirinkite iš sąrašo:': 'Or pick from the list:',
+
   // Dashboard
   'Pajamos': 'Income',
   'Išlaidos': 'Costs',

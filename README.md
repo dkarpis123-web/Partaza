@@ -160,3 +160,8 @@ Pirkėjo apsaugos mokestis: **4,5 % + 0,45 €** nuo dalies kainos ir pristatymo
 Jis parinktas taip, kad platformai mokėjimai nieko nekainuotų net brangiausiu atveju: „Stripe“ kortelės mokestis
 (1,5 % + 0,25 € ES kortelėms, iki 3,25 % + 0,25 € ne Europos kortelėms), „Connect“ išmokos mokestis (0,25 % + 0,10 €)
 ir 21 % PVM nuo paties mokesčio. Likutis dengia 2 € per mėnesį už kiekvieną aktyvų pardavėją ir ginčų mokesčius.
+
+## Trečiųjų šalių duomenys
+
+- Markių ir modelių sąrašas (`src/data/cars.ts`) sudarytas pagal atvirą rinkinį „Global Vehicle Models List“ (MIT licencija, github.com/serhatkildaci/global-car-models).
+- Šalių pavadinimai (`src/data/countries.ts`) – iš „Unicode CLDR“.

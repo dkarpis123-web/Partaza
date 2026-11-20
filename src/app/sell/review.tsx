@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-native';
 
+import { CarPicker } from '@/components/CarPicker';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
@@ -94,6 +95,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
   const [editCountry, setEditCountry] = useState(false);
+  const [pickCar, setPickCar] = useState(false);
   const [motorsport, setMotorsport] = useState(editing?.motorsport ?? false);
   const [description, setDescription] = useState(editing?.description ?? '');
   const [costText, setCostText] = useState(editing?.cost != null ? toText(editing.cost) : '');
@@ -150,6 +152,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPhotos, editing, whole, live, registered, ready]);
 
+  const fitsList = fits.split(',').map((f) => f.trim()).filter(Boolean);
   const advice = useMemo(() => priceAdviceFromMarket(oem, editing ? listings.filter((l) => l.id !== editing.id) : listings, defects.length > 0), [oem, listings, defects.length, editing]);
   const price = parsePrice(priceText);
 
@@ -218,6 +221,16 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Field label="Pavadinimas" value={title} onChangeText={setTitle} />
         <Field label="Dalies (OEM) numeris" value={oem} onChangeText={setOem} hint="Pagal numerį pirkėjai ras dalį ir matysime panašių dalių kainas." />
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />
+        <Chip label={pickCar ? 'Slėpti markių sąrašą' : 'Pasirinkti markę ir modelį iš sąrašo'} selected={pickCar} onPress={() => setPickCar((v) => !v)} />
+        {pickCar ? (
+          <CarPicker
+            picked={fitsList}
+            onPick={(make, model) => {
+              const item = `${make} ${model}`.trim();
+              setFits(fitsList.includes(item) ? fitsList.filter((f) => f !== item).join(', ') : [...fitsList, item].join(', '));
+            }}
+          />
+        ) : null}
         <Field
           label="Aprašymas (nebūtina)"
           value={description}

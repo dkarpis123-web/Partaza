@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
 
+import { CarPicker } from '@/components/CarPicker';
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
@@ -171,6 +172,15 @@ export default function SearchScreen() {
           ) : null}
           <Field label="Markė" value={makeText || vinInfo?.make || ''} onChangeText={(t) => { setMakeText(t); setCarError(''); }} placeholder="Pvz., Volkswagen" />
           <Field label="Modelis" value={modelText} onChangeText={setModelText} placeholder={modelSearchTerm(vinInfo) || 'Pvz., Transporter'} />
+          <Muted>Arba pasirinkite iš sąrašo:</Muted>
+          <CarPicker
+            picked={[`${makeText} ${modelText}`.trim()]}
+            onPick={(make, model) => {
+              setMakeText(make);
+              setModelText(model);
+              setCarError('');
+            }}
+          />
           {carError ? <Notice tone="warn">{carError}</Notice> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button label="Išsaugoti" onPress={saveCar} style={{ flex: 1 }} />
