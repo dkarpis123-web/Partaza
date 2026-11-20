@@ -75,6 +75,8 @@ interface Store extends State {
   leaveReview: (kind: 'order' | 'payment', orderId: string, stars: number, comment: string) => Result;
   /** Uploads the photos and asks the AI what part they show. Returns the uploaded photo links too. */
   aiRecognize: (photos: string[]) => Promise<{ photos: string[]; result?: Recognition; error?: string }>;
+  /** Search by photo: uploads the photo and asks the AI which listings show the same kind of part. */
+  aiMatch: (photo: string) => Promise<{ name?: string; oem?: string; ids?: string[]; error?: string }>;
   /** Asks the AI to look up current asking prices for this part on public web pages. */
   aiPrices: (part: { title: string; oem: string; fits: string; condition: string; defects: boolean; country: string }) => Promise<{ prices?: WebPrices; error?: string }>;
   /** Follows or unfollows a seller. */
@@ -642,6 +644,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       };
     };
 
+    const aiMatch: Store['aiMatch'] = async (photo) => {
+      const { me } = stateRef.current;
+      const uploaded = await uploadPhotos([photo], me.id);
+      if (!uploaded.urls) return { error: uploaded.error };
+      const { data, error } = await askAi({ action: 'match', photo: uploaded.urls[0] });
+      if (!data) return { error };
+      return { name: data.part_name ?? '', oem: data.oem ?? '', ids: Array.isArray(data.ids) ? data.ids : [] };
+    };
+
     const aiPrices: Store['aiPrices'] = async (part) => {
       const { data, error } = await askAi({ action: 'price', ...part });
       if (!data) return { error };
@@ -1013,7 +1024,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, aiRecognize, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, aiRecognize, aiMatch, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

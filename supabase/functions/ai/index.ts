@@ -1,5 +1,6 @@
 // Partaza AI helpers for sellers, run on Claude:
 //   { action: 'recognize', photos: [public photo URLs], lang }       → title, part number, fit, vehicle type, visible damage
+//   { action: 'match', photo: public photo URL, lang }               → which listings on the marketplace show the same kind of part
 //   { action: 'price', title, oem, fits, condition, defects, country, lang } → price range in EUR from public web pages, with sources
 // Only signed-in users may call it, and each user has a daily limit, because every call costs money.
 //
@@ -17,6 +18,8 @@ const DAILY_LIMIT = Math.max(1, Number(Deno.env.get('AI_DAILY_LIMIT') ?? '40') |
 const VISION_MODEL = 'claude-sonnet-5-5';
 const SEARCH_MODEL = 'claude-sonnet-5-5';
 const VEHICLE_TYPES = ['car', 'motorcycle', 'truck', 'boat', 'moped', 'scooter', 'kart', 'bicycle'];
+
+const PHOTO_URL = /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\/listing-photos\//;
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -51,7 +54,7 @@ const language = (lang: unknown) => (lang === 'en' ? 'English' : 'Lithuanian');
 
 async function recognize(body: Json): Promise<Json> {
   const photos = (Array.isArray(body.photos) ? body.photos : [])
-    .filter((u: unknown) => typeof u === 'string' && /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\/listing-photos\//.test(u))
+    .filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u))
     .slice(0, 4);
   if (photos.length === 0) return { error: 'no_photos' };
 
@@ -90,6 +93,59 @@ async function recognize(body: Json): Promise<Json> {
     vehicle_type: VEHICLE_TYPES.includes(found.vehicle_type) ? found.vehicle_type : 'car',
     defects: (Array.isArray(found.defects) ? found.defects : []).map((d: unknown) => text(d, 120)).filter(Boolean).slice(0, 6),
   };
+}
+
+/** Search by photo: Claude looks at the buyer's photo and picks the listings that are the same kind of part. */
+// deno-lint-ignore no-explicit-any
+async function match(body: Json, admin: any): Promise<Json> {
+  if (typeof body.photo !== 'string' || !PHOTO_URL.test(body.photo)) return { error: 'no_photos' };
+  const { data: rows } = await admin
+    .from('listings')
+    .select('id, title, oem, fits, vehicle_type')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(250);
+  const listings: Json[] = rows ?? [];
+  const catalogue = listings.map((l, i) => `${i + 1} | ${text(l.title, 90)} | ${text(l.oem, 30) || '-'} | ${text(l.fits, 60) || '-'} | ${l.vehicle_type}`).join('\n');
+
+  const result = await claude({
+    model: VISION_MODEL,
+    max_tokens: 500,
+    tools: [{
+      name: 'report_matches',
+      description: 'Reports what part the photo shows and which listings offer the same kind of part.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          part_name: { type: 'string', description: 'Short name of the part in the photo. Empty if it is not a vehicle part.' },
+          oem: { type: 'string', description: 'Part number readable in the photo, exactly as written. Empty if none is clearly readable.' },
+          matches: { type: 'array', items: { type: 'integer' }, description: 'Numbers of the listings that are the same kind of part, best match first, at most 12. Empty if none.' },
+        },
+        required: ['part_name', 'oem', 'matches'],
+      },
+    }],
+    tool_choice: { type: 'tool', name: 'report_matches' },
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url: body.photo } },
+        {
+          type: 'text',
+          text:
+            `A buyer photographed a vehicle part they are looking for. Name the part in ${language(body.lang)} and read its part number if one is clearly visible. ` +
+            `Then choose from the listings below those that offer the same kind of part (the same component; an identical part number is the best match). ` +
+            `Do not include listings for a different component just because they fit the same vehicle.\n\n` +
+            `Listings (number | title | part number | fits | vehicle type):\n${catalogue || '(no listings)'}`,
+        },
+      ],
+    }],
+  });
+  const found = (result.content ?? []).find((b: Json) => b.type === 'tool_use' && b.name === 'report_matches')?.input ?? {};
+  const ids = (Array.isArray(found.matches) ? found.matches : [])
+    .map((n: unknown) => listings[Number(n) - 1]?.id)
+    .filter((id: unknown, i: number, all: unknown[]) => typeof id === 'string' && all.indexOf(id) === i)
+    .slice(0, 12);
+  return { part_name: text(found.part_name, 120), oem: text(found.oem, 60), ids };
 }
 
 async function price(body: Json): Promise<Json> {
@@ -186,12 +242,13 @@ Deno.serve(async (req: Request) => {
   } catch (_) {
     return reply({ error: 'bad_request' });
   }
-  if (body.action !== 'recognize' && body.action !== 'price') return reply({ error: 'bad_request' });
+  if (body.action !== 'recognize' && body.action !== 'price' && body.action !== 'match') return reply({ error: 'bad_request' });
 
   const { data: used } = await admin.rpc('ai_use', { p_user: who.user.id, p_limit: DAILY_LIMIT });
   if (used === false) return reply({ error: 'daily_limit' });
 
   try {
+    if (body.action === 'match') return reply(await match(body, admin));
     return reply(body.action === 'recognize' ? await recognize(body) : await price(body));
   } catch (error) {
     console.error('ai failed', body.action, (error as Error).message);

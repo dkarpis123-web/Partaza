@@ -1,6 +1,7 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, View, useWindowDimensions } from 'react-native';
+import { Platform, ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { CarPicker } from '@/components/CarPicker';
 import { ListingGrid } from '@/components/ListingCard';
@@ -31,7 +32,7 @@ export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; type?: string; special?: string }>();
   useLang();
   const router = useRouter();
-  const { listings, myCar, setMyCar, savedSearches, saveSearch, removeSearch, markSearchSeen, me, live, registered } = useStore();
+  const { listings, myCar, setMyCar, savedSearches, saveSearch, removeSearch, markSearchSeen, me, live, registered, aiMatch } = useStore();
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState(params.q ?? '');
@@ -108,7 +109,36 @@ export default function SearchScreen() {
     markSearchSeen(s.id);
   };
 
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProblem, setPhotoProblem] = useState('');
+  const [photoHit, setPhotoHit] = useState<{ name: string; oem: string; ids: string[] } | null>(null);
+  const searchByPhoto = async (source: 'camera' | 'library') => {
+    if (!registered) return router.push('/register');
+    setPhotoProblem('');
+    try {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) return setPhotoProblem('Kad nufotografuotumėte dalį, leiskite programėlei naudoti kamerą.');
+      }
+      const picked = source === 'camera' ? await ImagePicker.launchCameraAsync({ quality: 0.6 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      if (picked.canceled || !picked.assets[0]) return;
+      setPhotoBusy(true);
+      const answer = await aiMatch(picked.assets[0].uri);
+      setPhotoBusy(false);
+      if (answer.error) return setPhotoProblem(answer.error);
+      setPhotoHit({ name: answer.name ?? '', oem: answer.oem ?? '', ids: answer.ids ?? [] });
+      // With nothing found, the recognised name or number becomes an ordinary search the person can save.
+      if ((answer.ids ?? []).length === 0) setQuery(answer.oem || answer.name || '');
+    } catch {
+      setPhotoBusy(false);
+      setPhotoProblem('Nepavyko atidaryti kameros. Pasirinkite nuotrauką iš galerijos.');
+    }
+  };
+
   const results = useMemo(() => {
+    if (photoHit && photoHit.ids.length > 0) {
+      return photoHit.ids.map((id) => listings.find((l) => l.id === id)).filter((l): l is Listing => !!l && (l.status ?? 'active') === 'active');
+    }
     const q = normalize(query);
     const c = normalize(city);
     const filtered = listings.filter((l) => {
@@ -131,7 +161,7 @@ export default function SearchScreen() {
       if (sort === 'place') return `${countryName(a.country)} ${a.city}`.localeCompare(`${countryName(b.country)} ${b.city}`, 'lt');
       return totalPrice(a) - totalPrice(b);
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort]);
+  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit]);
 
   return (
     <Page>
@@ -146,6 +176,22 @@ export default function SearchScreen() {
           borderRadius: radius.md, backgroundColor: colors.surface, fontSize: 16, fontWeight: '600', color: colors.ink,
         }}
       />
+      {live ? (
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button label={photoBusy ? 'Ieškoma pagal nuotrauką…' : 'Ieškoti pagal nuotrauką'} kind="outline" disabled={photoBusy} onPress={() => searchByPhoto('library')} style={{ flex: 1 }} />
+            {Platform.OS === 'web' ? null : <Button label="Fotografuoti" kind="outline" disabled={photoBusy} onPress={() => searchByPhoto('camera')} />}
+          </View>
+          {photoBusy ? <Muted>DI žiūri į nuotrauką ir lygina su skelbimais. Tai užtrunka keliolika sekundžių.</Muted> : null}
+          {photoProblem ? <Notice tone="warn">{photoProblem}</Notice> : null}
+          {photoHit ? (
+            <Notice>
+              {`${tr('Nuotraukoje')}: ${photoHit.name || tr('dalies atpažinti nepavyko')}${photoHit.oem ? ` · ${photoHit.oem}` : ''}. ${photoHit.ids.length > 0 ? `${tr('Rasta panašių skelbimų')}: ${photoHit.ids.length}.` : tr('Tokios dalies skelbimų dabar nėra – galite išsaugoti paiešką ir sulaukti, kol atsiras.')}`}
+            </Notice>
+          ) : null}
+          {photoHit ? <Button label="Baigti paiešką pagal nuotrauką" kind="quiet" onPress={() => setPhotoHit(null)} /> : null}
+        </View>
+      ) : null}
       {myCar && !editCar ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <Chip label={`Tinka: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}`} selected={onlyMyCar} onPress={() => setOnlyMyCar((v) => !v)} />

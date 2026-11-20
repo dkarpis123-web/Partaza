@@ -438,6 +438,15 @@ export const EN: Record<string, string> = {
   'kaip pardavėjas': 'as a seller',
   'kaip pirkėjas': 'as a buyer',
 
+  'Ieškoti pagal nuotrauką': 'Search by photo',
+  'Ieškoma pagal nuotrauką…': 'Searching by photo…',
+  'DI žiūri į nuotrauką ir lygina su skelbimais. Tai užtrunka keliolika sekundžių.': 'The AI is looking at the photo and comparing it with the listings. This takes several seconds.',
+  'Nuotraukoje': 'In the photo',
+  'dalies atpažinti nepavyko': 'the part could not be recognised',
+  'Rasta panašių skelbimų': 'Similar listings found',
+  'Tokios dalies skelbimų dabar nėra – galite išsaugoti paiešką ir sulaukti, kol atsiras.': 'There are no listings for this part right now – you can save the search and wait until one appears.',
+  'Baigti paiešką pagal nuotrauką': 'End the photo search',
+
   // Dashboard
   'Pajamos': 'Income',
   'Išlaidos': 'Costs',
