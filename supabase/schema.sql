@@ -362,3 +362,31 @@ create policy listing_finance_own on public.listing_finance for all to authentic
     and exists (select 1 from public.listings l where l.id = listing_id and l.seller_id = (select auth.uid()))
     and (donor_id is null or exists (select 1 from public.donors d where d.id = donor_id and d.owner_id = (select auth.uid())))
   );
+
+-- ---------------------------------------------------------------------------
+-- 0.4: telefono numeris būtinas registruojantis
+-- ---------------------------------------------------------------------------
+
+-- Numeris laikomas privačiuose paskyros duomenyse (auth.users), ne viešame profilyje.
+-- Registracija be tinkamo numerio atmetama pačiame serveryje.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if coalesce(new.raw_user_meta_data ->> 'phone', '') !~ '^\+[1-9][0-9]{7,14}$' then
+    raise exception 'phone_required';
+  end if;
+  insert into public.profiles (id, name, kind)
+  values (
+    new.id,
+    coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), 'Naudotojas'),
+    case when new.raw_user_meta_data ->> 'kind' = 'business' then 'business' else 'private' end
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+revoke all on function public.handle_new_user() from public, anon, authenticated;

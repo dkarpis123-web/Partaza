@@ -1,11 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 
+import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
 import { useStore } from '@/store';
-import { colors, money, radius } from '@/theme';
+import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, VEHICLE_LABELS, VehicleType } from '@/types';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
@@ -25,10 +26,10 @@ function parsePrice(text: string): number | null {
 export default function ReviewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; donor?: string }>();
-  const { listings, donors, registered, addListing } = useStore();
+  const { listings, donors, registered, phone, addListing } = useStore();
   const donor = donors.find((d) => d.id === params.donor);
 
-  const photos = useMemo<string[]>(() => {
+  const initialPhotos = useMemo<string[]>(() => {
     try {
       const parsed = JSON.parse(params.photos ?? '[]');
       return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === 'string') : [];
@@ -36,6 +37,8 @@ export default function ReviewScreen() {
       return [];
     }
   }, [params.photos]);
+  // The seller can still add, remove or retake photos here before publishing.
+  const [photos, setPhotos] = useState<string[]>(initialPhotos);
 
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
@@ -58,7 +61,7 @@ export default function ReviewScreen() {
 
   useEffect(() => {
     let active = true;
-    recognizePart(photos).then((r) => {
+    recognizePart(initialPhotos).then((r) => {
       if (!active) return;
       setTitle(r.title);
       setOem(r.oem);
@@ -71,7 +74,7 @@ export default function ReviewScreen() {
     return () => {
       active = false;
     };
-  }, [photos]);
+  }, [initialPhotos]);
 
   const advice = useMemo(() => priceAdviceFromMarket(oem, listings, defects.length > 0), [oem, listings, defects.length]);
   const price = parsePrice(priceText);
@@ -88,6 +91,7 @@ export default function ReviewScreen() {
       router.push('/register');
       return;
     }
+    if (!phone) return setError('Profilyje įrašykite telefono numerį – be jo skelbimo įdėti negalima.');
     setPublishing(true);
     const result = await addListing({
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
@@ -116,13 +120,10 @@ export default function ReviewScreen() {
         <Muted>Užpildėme pagal jūsų nuotraukas. Peržiūrėkite ir pataisykite, jei ką supratome ne taip.</Muted>
       )}
 
-      {photos.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {photos.map((uri) => (
-            <Image key={uri} source={{ uri }} accessibilityLabel="Dalies nuotrauka" style={{ width: 84, height: 84, borderRadius: radius.md, backgroundColor: colors.placeholder }} />
-          ))}
-        </ScrollView>
-      ) : null}
+      <Card>
+        <Heading>Nuotraukos ({photos.length})</Heading>
+        <PhotoEditor photos={photos} onChange={setPhotos} />
+      </Card>
 
       <Card>
         <Field label="Pavadinimas" value={title} onChangeText={setTitle} />

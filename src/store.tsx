@@ -21,6 +21,8 @@ interface State {
   threads: Thread[];
   /** The signed-in seller's own dismantled vehicles. */
   donors: Donor[];
+  /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
+  phone: string;
 }
 
 type Result = Promise<string | null>;
@@ -30,8 +32,10 @@ interface Store extends State {
   /** Saved on this device only; never sent to the server. */
   myCar: MyCar | null;
   setMyCar: (car: MyCar | null) => void;
-  registerDemo: (name: string, kind: SellerKind) => void;
-  signUp: (email: string, password: string, name: string, kind: SellerKind) => Result;
+  registerDemo: (name: string, kind: SellerKind, phone: string) => void;
+  signUp: (email: string, password: string, name: string, kind: SellerKind, phone: string) => Result;
+  setPhone: (phone: string) => Result;
+  updatePhotos: (listingId: string, photos: string[]) => Result;
   signIn: (email: string, password: string) => Result;
   signOut: () => Result;
   setKind: (kind: SellerKind) => Result;
@@ -57,8 +61,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '' }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '' };
 }
 
 let counter = 0;
@@ -76,6 +80,7 @@ const ERRORS: Record<string, string> = {
   offer_not_pending: 'Į šį pasiūlymą jau atsakyta.',
   not_allowed: 'Į savo pasiūlymą atsakyti negalima.',
   not_authenticated: 'Pirmiausia prisijunkite.',
+  phone_required: 'Įrašykite telefono numerį, pvz., +37061234567.',
   'Invalid login credentials': 'Neteisingas el. paštas arba slaptažodis.',
   'User already registered': ALREADY_REGISTERED,
   'Email not confirmed': 'El. paštas dar nepatvirtintas. Atidarykite laišką ir paspauskite nuorodą.',
@@ -153,6 +158,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) return;
     const { data: sessionData } = await supabase.auth.getSession();
     const uid = sessionData.session?.user.id ?? null;
+    const phone = String(sessionData.session?.user.user_metadata?.phone ?? '');
 
     const [listingsRes, threadsRes] = await Promise.all([
       supabase.from('listings').select('*').order('created_at', { ascending: false }).limit(300),
@@ -189,7 +195,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '' });
   }, []);
 
   useEffect(() => {
@@ -226,14 +232,62 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   /* ---------- Actions ---------- */
 
   const actions = useMemo(() => {
-    const registerDemo: Store['registerDemo'] = (name, kind) =>
-      setState((s) => ({ ...s, registered: true, me: { ...s.me, name, kind } }));
+    const registerDemo: Store['registerDemo'] = (name, kind, phone) =>
+      setState((s) => ({ ...s, registered: true, phone, me: { ...s.me, name, kind } }));
 
-    const signUp: Store['signUp'] = async (email, password, name, kind) => {
+    const setPhone: Store['setPhone'] = async (phone) => {
+      if (supabase) {
+        const { error } = await supabase.auth.updateUser({ data: { phone } });
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, phone }));
+      return null;
+    };
+
+    // Uploads photos that are still on the device and returns public links for all of them.
+    const uploadPhotos = async (photos: string[], ownerId: string): Promise<{ urls?: string[]; error?: string }> => {
+      if (!supabase) return { urls: photos };
+      const urls: string[] = [];
+      for (let i = 0; i < photos.length; i += 1) {
+        const uri = photos[i];
+        if (/^https?:\/\//.test(uri)) {
+          urls.push(uri);
+          continue;
+        }
+        try {
+          const response = await fetch(uri);
+          const bytes = await response.arrayBuffer();
+          const type = response.headers.get('content-type') || 'image/jpeg';
+          const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+          const path = `${ownerId}/${Date.now()}_${i}.${extension}`;
+          const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType: type });
+          if (error) return { error: explain(error) };
+          urls.push(supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl);
+        } catch {
+          return { error: 'Nepavyko įkelti nuotraukos. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+        }
+      }
+      return { urls };
+    };
+
+    const updatePhotos: Store['updatePhotos'] = async (listingId, photos) => {
+      const { me } = stateRef.current;
+      const uploaded = await uploadPhotos(photos, me.id);
+      if (!uploaded.urls) return uploaded.error ?? 'Nepavyko įkelti nuotraukų.';
+      const urls = uploaded.urls;
+      if (supabase) {
+        const { error } = await supabase.from('listings').update({ photos: urls }).eq('id', listingId);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, photos: urls } : l)) }));
+      return null;
+    };
+
+    const signUp: Store['signUp'] = async (email, password, name, kind, phone) => {
       if (!supabase) return null;
       // After confirming the e-mail the person lands back on this site (web) instead of a default address.
       const emailRedirectTo = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind }, emailRedirectTo } });
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind, phone }, emailRedirectTo } });
       if (error) return explain(error);
       // For an address that is already registered the server answers "success" without sending
       // anything (so strangers cannot probe addresses); the tell-tale is an empty identities list.
@@ -280,26 +334,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return { id };
       }
       // Photos first: each file goes into the seller's own folder, the listing stores public links.
-      const urls: string[] = [];
-      for (let i = 0; i < draft.photos.length; i += 1) {
-        const uri = draft.photos[i];
-        if (/^https?:\/\//.test(uri) && !uri.startsWith('blob:')) {
-          urls.push(uri);
-          continue;
-        }
-        try {
-          const response = await fetch(uri);
-          const bytes = await response.arrayBuffer();
-          const type = response.headers.get('content-type') || 'image/jpeg';
-          const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
-          const path = `${me.id}/${Date.now()}_${i}.${extension}`;
-          const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType: type });
-          if (error) return { error: explain(error) };
-          urls.push(supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl);
-        } catch {
-          return { error: 'Nepavyko įkelti nuotraukos. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
-        }
-      }
+      const uploaded = await uploadPhotos(draft.photos, me.id);
+      if (!uploaded.urls) return { error: uploaded.error ?? 'Nepavyko įkelti nuotraukų.' };
+      const urls = uploaded.urls;
       const { data, error } = await supabase
         .from('listings')
         .insert({
@@ -454,7 +491,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, signUp, signIn, signOut, setKind, addListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, setPhone, updatePhotos, signUp, signIn, signOut, setKind, addListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
   const value = useMemo<Store>(

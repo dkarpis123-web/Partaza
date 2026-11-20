@@ -3,13 +3,15 @@ import React, { useState } from 'react';
 import { Text, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
-import { Button, Card, Chip, Heading, Muted, Notice, Page } from '@/components/ui';
+import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
+import { normalizePhone } from '@/services/phone';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors } from '@/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, setKind, signOut, deleteAccount } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount } = useStore();
+  const [phoneText, setPhoneText] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +39,34 @@ export default function ProfileScreen() {
           <Chip label="Verslas" selected={me.kind === 'business'} onPress={async () => show(await setKind('business'))} />
         </View>
         <Muted>Statusą pirkėjai mato kiekviename jūsų skelbime. Verslo pardavėjų pirkėjams taikoma 14 dienų grąžinimo teisė.</Muted>
+      </Card>
+
+      <Card>
+        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Telefono numeris</Text>
+        {phoneText === null ? (
+          <>
+            {phone ? <Muted>{phone} · kitiems naudotojams nerodomas</Muted> : <Notice tone="warn">Telefono numeris būtinas. Be jo skelbimo įdėti negalima.</Notice>}
+            <Button label={phone ? 'Keisti numerį' : 'Įrašyti numerį'} kind="outline" onPress={() => setPhoneText(phone)} />
+          </>
+        ) : (
+          <>
+            <Field label="Telefono numeris" value={phoneText} onChangeText={setPhoneText} keyboardType="phone-pad" autoComplete="tel" placeholder="+37061234567" />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button label="Atšaukti" kind="outline" onPress={() => { setPhoneText(null); setError(''); }} style={{ flex: 1 }} />
+              <Button
+                label="Išsaugoti"
+                style={{ flex: 1 }}
+                onPress={async () => {
+                  const value = normalizePhone(phoneText);
+                  if (!value) return setError('Įrašykite telefono numerį, pvz., +37061234567.');
+                  const problem = await setPhone(value);
+                  show(problem);
+                  if (!problem) setPhoneText(null);
+                }}
+              />
+            </View>
+          </>
+        )}
       </Card>
 
       <Button label="Mano prekyba: pajamos, išlaidos, pelnas" kind="dark" onPress={() => router.push('/dashboard')} />

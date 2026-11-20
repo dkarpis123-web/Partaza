@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { Photo, deliveryText } from '@/components/ListingCard';
+import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -11,7 +12,10 @@ import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, report, markSold } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos } = useStore();
+  const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
+  const [shown, setShown] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [soldText, setSoldText] = useState('');
   const [selling, setSelling] = useState(false);
   const [reported, setReported] = useState(false);
@@ -68,11 +72,48 @@ export default function ListingScreen() {
         )
       }>
       <View style={{ borderRadius: 14, overflow: 'hidden' }}>
-        <Photo uri={listing.photos[0]} height={260} />
+        <Photo uri={listing.photos[Math.min(shown, Math.max(0, listing.photos.length - 1))]} height={260} />
         <View style={{ position: 'absolute', left: 12, bottom: 12 }}>
           <DefectBadge hasDefects={hasDefects} count={listing.defects.length} />
         </View>
       </View>
+
+      {listing.photos.length > 1 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {listing.photos.map((uri, index) => (
+            <Button key={`${uri}-${index}`} label={`${index + 1}`} kind={index === shown ? 'dark' : 'outline'} onPress={() => setShown(index)} />
+          ))}
+        </View>
+      ) : null}
+
+      {mine && listing.status !== 'sold' ? (
+        photoDraft === null ? (
+          <Button label="Keisti nuotraukas" kind="outline" onPress={() => setPhotoDraft(listing.photos)} />
+        ) : (
+          <Card>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Nuotraukos ({photoDraft.length})</Text>
+            <PhotoEditor photos={photoDraft} onChange={setPhotoDraft} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button label="Atšaukti" kind="outline" onPress={() => setPhotoDraft(null)} style={{ flex: 1 }} />
+              <Button
+                label={saving ? 'Saugoma…' : 'Išsaugoti nuotraukas'}
+                disabled={saving}
+                style={{ flex: 1 }}
+                onPress={async () => {
+                  setSaving(true);
+                  const problem = await updatePhotos(listing.id, photoDraft);
+                  setSaving(false);
+                  setError(problem ?? '');
+                  if (!problem) {
+                    setPhotoDraft(null);
+                    setShown(0);
+                  }
+                }}
+              />
+            </View>
+          </Card>
+        )
+      ) : null}
 
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
       <Text style={{ fontSize: 30, fontWeight: '700', color: colors.ink }}>

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
 import { Button, Field, Heading, Muted, Notice, Page } from '@/components/ui';
+import { normalizePhone } from '@/services/phone';
 import { ALREADY_REGISTERED, useStore } from '@/store';
 import { colors, radius } from '@/theme';
 import type { SellerKind } from '@/types';
@@ -18,6 +19,7 @@ export default function RegisterScreen() {
   const [mode, setMode] = useState<'signUp' | 'signIn'>('signUp');
   const [kind, setKind] = useState<SellerKind>('private');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,8 +29,10 @@ export default function RegisterScreen() {
   const submit = async () => {
     if (busy) return;
     if (!isSignIn && !name.trim()) return setError('Įrašykite vardą arba įmonės pavadinimą.');
+    const phoneNumber = normalizePhone(phone);
+    if (!isSignIn && !phoneNumber) return setError('Įrašykite telefono numerį, pvz., +37061234567.');
     if (!live) {
-      registerDemo(name.trim(), kind);
+      registerDemo(name.trim(), kind, phoneNumber ?? '');
       return router.back();
     }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Įrašykite el. pašto adresą.');
@@ -36,7 +40,7 @@ export default function RegisterScreen() {
     setBusy(true);
     const problem = isSignIn
       ? await signIn(email.trim(), password)
-      : await signUp(email.trim(), password, name.trim(), kind);
+      : await signUp(email.trim(), password, name.trim(), kind, phoneNumber ?? '');
     setBusy(false);
     if (problem) {
       // Already registered: show the sign-in form with the address kept, so one more tap signs in.
@@ -73,12 +77,14 @@ export default function RegisterScreen() {
             );
           })}
           <Field label="Vardas arba įmonės pavadinimas" value={name} onChangeText={(t) => { setName(t); clear(); }} placeholder="Pvz., Tomas V." />
+          <Field label="Telefono numeris" value={phone} onChangeText={(t) => { setPhone(t); clear(); }} keyboardType="phone-pad" autoComplete="tel" placeholder="+37061234567" hint="Būtinas. Kitiems naudotojams nerodomas." />
         </>
       )}
       {live ? (
         <>
           <Field label="El. paštas" value={email} onChangeText={(t) => { setEmail(t); clear(); }} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
           <Field label="Slaptažodis" value={password} onChangeText={(t) => { setPassword(t); clear(); }} secureTextEntry autoCapitalize="none" hint={isSignIn ? undefined : 'Bent 8 ženklai.'} />
+          {isSignIn ? null : <Muted>El. paštą reikės patvirtinti: atsiųsime laišką su nuoroda. Be patvirtinimo prisijungti negalima.</Muted>}
         </>
       ) : null}
       {error ? <Notice tone="warn">{error}</Notice> : null}
