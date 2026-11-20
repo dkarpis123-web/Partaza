@@ -358,6 +358,18 @@ export const EN: Record<string, string> = {
   'Įkeliama…': 'Uploading…',
   'Nuotrauką ar logotipą pirkėjai mato jūsų skelbimuose.': 'Buyers see your photo or logo on your listings.',
 
+  'Programėlė': 'App',
+  'Programėlė telefonui': 'Phone app',
+  'Bandomoji versija: programėlė dar tobulinama ir parduotuvėse jos nėra.': 'Test version: the app is still being improved and is not in the app stores yet.',
+  '„Android“ telefonui': 'For Android phones',
+  'Atsisiųsti programėlę (APK)': 'Download the app (APK)',
+  'Atsisiuntę atidarykite failą. Telefonas paklaus, ar leisti diegti iš šio šaltinio – leiskite.': 'After downloading, open the file. The phone will ask whether to allow installing from this source – allow it.',
+  'Nepavyko patikrinti, ar yra programėlė. Bandykite vėliau.': 'Could not check whether the app is available. Try again later.',
+  'Programėlė dar ruošiama. Užsukite vėliau.': 'The app is still being prepared. Check back later.',
+  '„iPhone“ ir kiti telefonai': 'iPhone and other phones',
+  'Naršyklėje atidarykite partaza.eu ir pasirinkite „Pridėti prie pradžios ekrano“. Svetainė atsidarys kaip programėlė, be naršyklės juostos.': 'Open partaza.eu in your browser and choose “Add to Home Screen”. The site then opens like an app, without the browser bar.',
+  'Jūs jau naudojate programėlę. Naujausią bandomąją versiją rasite svetainėje partaza.eu/app.': 'You are already using the app. The latest test version is at partaza.eu/app.',
+
   // Dashboard
   'Pajamos': 'Income',
   'Išlaidos': 'Costs',
@@ -556,6 +568,7 @@ export const EN_PATTERNS: [RegExp, string | ((...groups: string[]) => string)][]
   [/^(\d+) dien(?:ą|as|ų)$/, (_, c) => n(c, 'day', 'days')],
   [/^(\d+) parduot\S+ dal\S+ pirkimo kaina neįrašyta, todėl jų išlaidos skaičiuojamos kaip 0 €\.$/, (_, c) => `No purchase price was entered for ${n(c, 'sold part', 'sold parts')}, so their costs are counted as €0.`],
   [/^Markė: (.+)$/, 'Make: $1'],
+  [/^Versija (.*) · (.*)$/, 'Version $1 · $2'],
   [/^(.+) klasė( \(.+\))?$/, '$1-Class$2'],
   [/^modelis: (.+)$/, 'model: $1'],
   [/^apie (\d{4}) m\.$/, 'about $1'],

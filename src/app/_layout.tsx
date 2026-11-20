@@ -24,6 +24,7 @@ const TITLES: Record<string, string> = {
   'payment/[id]': 'Užsakymas',
   'payouts': 'Mokėjimai ir išmokos',
   'orders': 'Užsakymai',
+  'app': 'Programėlė',
   'reset': 'Slaptažodis',
   'terms': 'Taisyklės',
   'privacy': 'Privatumas',
@@ -63,6 +64,7 @@ export default function RootLayout() {
         <Stack.Screen name="payment/[id]" options={{ title: tr('Užsakymas') }} />
         <Stack.Screen name="payouts" options={{ title: tr('Mokėjimai ir išmokos') }} />
         <Stack.Screen name="orders" options={{ title: tr('Užsakymai') }} />
+        <Stack.Screen name="app" options={{ title: tr('Programėlė') }} />
         <Stack.Screen name="reset" options={{ title: tr('Slaptažodis') }} />
         <Stack.Screen name="terms" options={{ title: tr('Taisyklės') }} />
         <Stack.Screen name="privacy" options={{ title: tr('Privatumas') }} />

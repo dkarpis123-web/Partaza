@@ -189,6 +189,7 @@ export default function ProfileScreen() {
         </>
       )}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Button label="Programėlė telefonui" kind="quiet" onPress={() => router.push('/app')} />
         <Button label="Taisyklės" kind="quiet" onPress={() => router.push('/terms')} />
         <Button label="Privatumo politika" kind="quiet" onPress={() => router.push('/privacy')} />
       </View>
