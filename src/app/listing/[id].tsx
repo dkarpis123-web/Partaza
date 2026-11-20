@@ -92,7 +92,7 @@ export default function ListingScreen() {
         ) : buying ? (
           <View style={{ gap: 8 }}>
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Perkate už {money(buyPrice)}{acceptedOffer ? ' (sutarta kaina)' : ''}</Text>
-            <Muted>Mokėjimai per „Partaza“ dar neįjungti. Patvirtinus dalis rezervuojama jums, o dėl apmokėjimo ir perdavimo susitarsite su pardavėju pokalbyje.</Muted>
+            <Muted>Šis pardavėjas mokėjimų per „Partaza“ dar nepriima. Patvirtinus dalis rezervuojama jums, o dėl apmokėjimo ir perdavimo susitarsite su pardavėju pokalbyje.</Muted>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button label="Atšaukti" kind="outline" onPress={() => setBuying(false)} style={{ flex: 1 }} />
               <Button label={ordering ? 'Palaukite…' : 'Patvirtinti pirkimą'} disabled={ordering} onPress={buy} style={{ flex: 1 }} />
