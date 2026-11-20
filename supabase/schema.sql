@@ -564,6 +564,37 @@ begin
 end;
 $$;
 
+-- Sellers a person follows, and searches they saved to be told about new matching parts. Private to the person.
+create table if not exists public.follows (
+  follower_id uuid not null references public.profiles (id) on delete cascade,
+  seller_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (follower_id, seller_id),
+  check (follower_id <> seller_id)
+);
+grant select, insert, delete on public.follows to authenticated;
+alter table public.follows enable row level security;
+drop policy if exists follows_own on public.follows;
+create policy follows_own on public.follows for all to authenticated
+  using (follower_id = (select auth.uid())) with check (follower_id = (select auth.uid()));
+
+create table if not exists public.saved_searches (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  query text not null default '' check (char_length(query) <= 120),
+  vehicle_type text,
+  country text,
+  city text not null default '' check (char_length(city) <= 80),
+  created_at timestamptz not null default now(),
+  seen_at timestamptz not null default now()
+);
+create index if not exists saved_searches_user_idx on public.saved_searches (user_id);
+grant select, insert, update, delete on public.saved_searches to authenticated;
+alter table public.saved_searches enable row level security;
+drop policy if exists saved_searches_own on public.saved_searches;
+create policy saved_searches_own on public.saved_searches for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
 create table if not exists public.favorites (
   user_id uuid not null references public.profiles (id) on delete cascade,
   listing_id uuid not null references public.listings (id) on delete cascade,

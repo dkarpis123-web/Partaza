@@ -14,7 +14,7 @@ const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { listings, ready, live } = useStore();
+  const { listings, ready, live, following } = useStore();
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [type, setType] = useState<VehicleType | null>(null);
@@ -24,6 +24,11 @@ export default function HomeScreen() {
     .filter((l) => (l.status ?? 'active') === 'active' && (type ? l.vehicleType === type : true) && (special === 'classic' ? !!l.classic : special === 'motorsport' ? !!l.motorsport : true))
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 12);
+
+  const fromFollowed = [...listings]
+    .filter((l) => following.includes(l.sellerId) && (l.status ?? 'active') === 'active')
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 6);
 
   const search = () => router.push({ pathname: '/search', params: { q: query, type: type ?? '', special: special ?? '' } });
 
@@ -54,6 +59,12 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
       {live ? null : <Notice tone="warn">Bandomoji versija: skelbimai pavyzdiniai, niekas neparduodama ir niekur nesaugoma.</Notice>}
+      {fromFollowed.length > 0 ? (
+        <>
+          <Heading>Sekamų pardavėjų skelbimai</Heading>
+          <ListingGrid listings={fromFollowed} width={Math.min(width, MAX_WIDTH)} />
+        </>
+      ) : null}
       <Heading>Nauji skelbimai</Heading>
       {!ready ? <Muted>Kraunama…</Muted> : null}
       {ready && shown.length === 0 ? (

@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
-import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, SellerKind, Thread, User } from '@/types';
+import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, SavedSearch, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -25,6 +25,9 @@ interface State {
   orders: Order[];
   /** Ids of listings the signed-in person has saved. */
   favorites: string[];
+  /** Sellers the person follows. */
+  following: string[];
+  savedSearches: SavedSearch[];
   /** Ids of people the signed-in person has blocked. Their listings and chats are hidden. */
   blocked: string[];
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
@@ -63,6 +66,12 @@ interface Store extends State {
   orderAction: (orderId: string, action: 'cancel' | 'hand' | 'complete') => Result;
   /** Saves or un-saves a listing. */
   toggleFavorite: (listingId: string) => Result;
+  /** Follows or unfollows a seller. */
+  toggleFollow: (sellerId: string) => Result;
+  saveSearch: (search: Omit<SavedSearch, 'id' | 'seenAt'>) => Result;
+  removeSearch: (id: string) => Result;
+  /** The person has looked at this search: its matches no longer count as new. */
+  markSearchSeen: (id: string) => void;
   blockUser: (userId: string) => Result;
   unblockUser: (userId: string) => Result;
   /** Sends a link for choosing a new password. */
@@ -110,8 +119,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], paidOrders: [], payReady: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], paidOrders: [], payReady: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], orders: [], paidOrders: [], payReady: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], orders: [], paidOrders: [], payReady: [] };
 }
 
 let counter = 0;
@@ -295,12 +304,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     let donors: Donor[] = [];
     let blocked: string[] = [];
     let favorites: string[] = [];
+    let following: string[] = [];
+    let savedSearches: SavedSearch[] = [];
     let orders: Order[] = [];
     if (uid) {
       const ordersRes = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       orders = (ordersRes.data ?? []).map(toOrder);
       const favoritesRes = await supabase.from('favorites').select('listing_id');
       favorites = (favoritesRes.data ?? []).map((f: Row) => f.listing_id);
+      const [followsRes, searchesRes] = await Promise.all([
+        supabase.from('follows').select('seller_id'),
+        supabase.from('saved_searches').select('*').order('created_at', { ascending: false }),
+      ]);
+      following = (followsRes.data ?? []).map((f: Row) => f.seller_id);
+      savedSearches = (searchesRes.data ?? []).map((r: Row) => ({
+        id: r.id, query: r.query ?? '', vehicleType: r.vehicle_type ?? null, country: r.country ?? null, city: r.city ?? '', seenAt: new Date(r.seen_at).getTime(),
+      }));
       const blocksRes = await supabase.from('blocks').select('blocked_id');
       blocked = (blocksRes.data ?? []).map((b: Row) => b.blocked_id);
       const [donorsRes, financeRes] = await Promise.all([
@@ -329,6 +348,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const ids = new Set<string>();
     listings.forEach((l) => ids.add(l.sellerId));
     blocked.forEach((id) => ids.add(id));
+    following.forEach((id) => ids.add(id));
     orders.forEach((o) => {
       if (o.buyerId) ids.add(o.buyerId);
       if (o.sellerId) ids.add(o.sellerId);
@@ -346,7 +366,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, orders, paidOrders, payReady });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, following, savedSearches, orders, paidOrders, payReady });
   }, []);
 
   useEffect(() => {
@@ -483,6 +503,50 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       setState((s) => ({ ...s, favorites: saved ? s.favorites.filter((id) => id !== listingId) : [...s.favorites, listingId] }));
       return null;
+    };
+
+    const toggleFollow: Store['toggleFollow'] = async (sellerId) => {
+      const { me, following } = stateRef.current;
+      const followed = following.includes(sellerId);
+      if (supabase) {
+        const { error } = followed
+          ? await supabase.from('follows').delete().eq('follower_id', me.id).eq('seller_id', sellerId)
+          : await supabase.from('follows').upsert({ follower_id: me.id, seller_id: sellerId }, { onConflict: 'follower_id,seller_id', ignoreDuplicates: true });
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, following: followed ? s.following.filter((id) => id !== sellerId) : [...s.following, sellerId] }));
+      return null;
+    };
+
+    const saveSearch: Store['saveSearch'] = async (search) => {
+      const { me } = stateRef.current;
+      let saved: SavedSearch = { ...search, id: newId('s'), seenAt: Date.now() };
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('saved_searches')
+          .insert({ user_id: me.id, query: search.query, vehicle_type: search.vehicleType, country: search.country, city: search.city })
+          .select()
+          .single();
+        if (error || !data) return explain(error ?? { message: '' });
+        saved = { ...search, id: data.id, seenAt: new Date(data.seen_at).getTime() };
+      }
+      setState((s) => ({ ...s, savedSearches: [saved, ...s.savedSearches] }));
+      return null;
+    };
+
+    const removeSearch: Store['removeSearch'] = async (id) => {
+      if (supabase) {
+        const { error } = await supabase.from('saved_searches').delete().eq('id', id);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, savedSearches: s.savedSearches.filter((x) => x.id !== id) }));
+      return null;
+    };
+
+    const markSearchSeen: Store['markSearchSeen'] = (id) => {
+      const now = Date.now();
+      setState((s) => ({ ...s, savedSearches: s.savedSearches.map((x) => (x.id === id ? { ...x, seenAt: now } : x)) }));
+      if (supabase) supabase.from('saved_searches').update({ seen_at: new Date(now).toISOString() }).eq('id', id).then(() => {});
     };
 
     const blockUser: Store['blockUser'] = async (userId) => {
@@ -850,7 +914,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

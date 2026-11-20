@@ -16,7 +16,7 @@ import { Text } from '@/components/Text';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, setLogo, signOut, deleteAccount, reducePrice, favorites, orders, paidOrders, payReady, userById } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, setLogo, signOut, deleteAccount, reducePrice, favorites, following, orders, paidOrders, payReady, userById } = useStore();
   const openOrders = orders.filter((o) => o.status === 'agreed' || o.status === 'handed').length;
   const saved = listings.filter((l) => favorites.includes(l.id) && (l.status ?? 'active') === 'active');
   const [now] = useState(() => Date.now());
@@ -143,6 +143,17 @@ export default function ProfileScreen() {
               </View>
             </View>
           ))}
+        </Card>
+      ) : null}
+
+      {following.length > 0 ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>Sekami pardavėjai ({following.length})</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {following.map((sellerId) => (
+              <Chip key={sellerId} label={userById(sellerId).name} selected={false} onPress={() => router.push(`/seller/${sellerId}`)} />
+            ))}
+          </View>
         </Card>
       ) : null}
 

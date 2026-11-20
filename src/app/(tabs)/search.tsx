@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
 
@@ -6,9 +6,11 @@ import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
 import { detectCountry } from '@/services/geo';
+import { tr, useLang } from '@/i18n';
+import { newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
-import { Listing, VEHICLE_LABELS, VehicleType } from '@/types';
+import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
 import { VEHICLE_ICONS } from '@/components/VehicleIcon';
 import { Text, TextInput } from '@/components/Text';
 
@@ -20,17 +22,15 @@ const SORT_LABELS: Record<Sort, string> = {
 };
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, '');
-}
-
 function totalPrice(listing: Listing): number {
   return listing.price + (listing.shipping ?? 0);
 }
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; type?: string; special?: string }>();
-  const { listings, myCar, setMyCar } = useStore();
+  useLang();
+  const router = useRouter();
+  const { listings, myCar, setMyCar, savedSearches, saveSearch, removeSearch, markSearchSeen, me, live, registered } = useStore();
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState(params.q ?? '');
@@ -85,6 +85,26 @@ export default function SearchScreen() {
     setSuggested(true);
     if (home && countries.includes(home) && country === null) setCountry(home);
   }
+
+  const current = { query: query.trim(), vehicleType: type, country, city: city.trim() };
+  const canSave = !!(current.query || current.vehicleType || current.country || current.city);
+  const alreadySaved = savedSearches.some(
+    (s) => normalize(s.query) === normalize(current.query) && s.vehicleType === current.vehicleType && s.country === current.country && normalize(s.city) === normalize(current.city),
+  );
+  const [saveProblem, setSaveProblem] = useState('');
+  const saveCurrent = async () => {
+    if (live && !registered) return router.push('/register');
+    setSaveProblem((await saveSearch(current)) ?? '');
+  };
+  const searchLabel = (s: SavedSearch) =>
+    [s.query, s.vehicleType ? tr(VEHICLE_LABELS[s.vehicleType]) : '', [s.city, s.country ? tr(s.country) : ''].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || tr('Visi skelbimai');
+  const openSaved = (s: SavedSearch) => {
+    setQuery(s.query);
+    setType(s.vehicleType);
+    setCountry(s.country);
+    setCity(s.city);
+    markSearchSeen(s.id);
+  };
 
   const results = useMemo(() => {
     const q = normalize(query);
@@ -217,9 +237,34 @@ export default function SearchScreen() {
         </Card>
       ) : null}
 
+      {savedSearches.length > 0 ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>Išsaugotos paieškos</Text>
+          {savedSearches.map((s) => {
+            const fresh = newMatches(listings, s, me.id).length;
+            return (
+              <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                  <Chip label={`${searchLabel(s)}${fresh > 0 ? ` · ${tr('nauji')}: ${fresh}` : ''}`} selected={fresh > 0} onPress={() => openSaved(s)} />
+                </View>
+                <Button label="Pašalinti" kind="quiet" onPress={() => removeSearch(s.id)} />
+              </View>
+            );
+          })}
+        </Card>
+      ) : null}
+
       <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>
         {results.length} {results.length === 1 ? 'skelbimas' : 'skelbimai'} · {SORT_LABELS[sort]}
       </Text>
+      {canSave ? (
+        alreadySaved ? (
+          <Muted>Ši paieška išsaugota: naujus atitinkančius skelbimus pažymėsime čia ir paieškos skirtuke.</Muted>
+        ) : (
+          <Button label="Išsaugoti paiešką ir matyti naujus skelbimus" kind="outline" onPress={saveCurrent} />
+        )
+      ) : null}
+      {saveProblem ? <Notice tone="warn">{saveProblem}</Notice> : null}
       {results.length === 0 ? (
         <Muted>Pagal šiuos filtrus nieko neradome. Pabandykite kitą kodą arba išjunkite dalį filtrų.</Muted>
       ) : (

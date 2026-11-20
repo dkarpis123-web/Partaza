@@ -6,6 +6,7 @@ import { Platform, View, type ColorValue } from 'react-native';
 import { Brand } from '@/components/Brand';
 import { HeaderRight } from '@/components/HeaderRight';
 import { tr, useLang } from '@/i18n';
+import { newMatches } from '@/services/match';
 import { useStore } from '@/store';
 import { colors } from '@/theme';
 
@@ -23,7 +24,8 @@ const TAB_TITLES: Record<string, string> = { search: 'Paieška', sell: 'Parduoti
 
 export default function TabsLayout() {
   useLang();
-  const { unreadThreadIds } = useStore();
+  const { unreadThreadIds, savedSearches, listings, me } = useStore();
+  const fresh = savedSearches.reduce((sum, s) => sum + newMatches(listings, s, me.id).length, 0);
   const unread = unreadThreadIds.length;
   return (
     <Tabs
@@ -42,7 +44,7 @@ export default function TabsLayout() {
         headerRight: () => <HeaderRight title={TAB_TITLES[route.name] ?? ''} />,
       })}>
       <Tabs.Screen name="index" options={{ title: tr('Pradžia'), tabBarIcon: icon('home-outline') }} />
-      <Tabs.Screen name="search" options={{ title: tr('Paieška'), tabBarIcon: icon('search-outline') }} />
+      <Tabs.Screen name="search" options={{ title: tr('Paieška'), tabBarIcon: icon('search-outline'), tabBarBadge: fresh > 0 ? fresh : undefined }} />
       <Tabs.Screen name="sell" options={{ title: tr('Parduoti'), tabBarIcon: icon('add-circle-outline') }} />
       <Tabs.Screen name="messages" options={{ title: tr('Žinutės'), tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `${tr('Žinutės, neskaitytų pokalbių:')} ${unread}` : tr('Žinutės') }} />
       <Tabs.Screen name="profile" options={{ title: tr('Profilis'), tabBarIcon: icon('person-outline') }} />

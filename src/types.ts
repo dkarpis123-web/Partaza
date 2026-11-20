@@ -40,6 +40,17 @@ export interface User {
   logo?: string | null;
 }
 
+/** A search the person saved; new matching listings are pointed out to them. */
+export interface SavedSearch {
+  id: string;
+  query: string;
+  vehicleType: VehicleType | null;
+  country: string | null;
+  city: string;
+  /** When the person last opened this search; listings newer than this count as new. */
+  seenAt: number;
+}
+
 export interface Listing {
   id: string;
   title: string;

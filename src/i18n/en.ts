@@ -372,6 +372,16 @@ export const EN: Record<string, string> = {
   'Naršyklėje atidarykite partaza.eu ir pasirinkite „Pridėti prie pradžios ekrano“. Svetainė atsidarys kaip programėlė, be naršyklės juostos.': 'Open partaza.eu in your browser and choose “Add to Home Screen”. The site then opens like an app, without the browser bar.',
   'Jūs jau naudojate programėlę. Naujausią bandomąją versiją rasite svetainėje partaza.eu/app.': 'You are already using the app. The latest test version is at partaza.eu/app.',
 
+  'Išsaugotos paieškos': 'Saved searches',
+  'Išsaugoti paiešką ir matyti naujus skelbimus': 'Save this search and see new listings',
+  'Ši paieška išsaugota: naujus atitinkančius skelbimus pažymėsime čia ir paieškos skirtuke.': 'This search is saved: new matching listings are marked here and on the Search tab.',
+  'nauji': 'new',
+  'Visi skelbimai': 'All listings',
+  'Sekti pardavėją': 'Follow seller',
+  'Nebesekti pardavėjo': 'Unfollow seller',
+  'Naujus šio pardavėjo skelbimus matysite pradžios puslapyje.': 'You will see this seller’s new listings on the home page.',
+  'Sekamų pardavėjų skelbimai': 'Listings from sellers you follow',
+
   // Dashboard
   'Pajamos': 'Income',
   'Išlaidos': 'Costs',
@@ -563,6 +573,8 @@ export const EN_PATTERNS: [RegExp, string | ((...groups: string[]) => string)][]
   [/^Jei adresas (.+) užregistruotas, išsiuntėme laišką su nuoroda naujam slaptažodžiui\. Nuoroda galioja trumpai\.$/, 'If the address $1 is registered, we have sent a message with a link for a new password. The link is valid for a short time.'],
   [/^Užblokuoti naudotojai \((\d+)\)$/, 'Blocked users ($1)'],
   [/^Mano skelbimai \((\d+)\)$/, 'My listings ($1)'],
+  [/^Sekami pardavėjai \((\d+)\)$/, 'Sellers you follow ($1)'],
+  [/^nauji: (\d+)$/, 'new: $1'],
   [/^Pardavėjo skelbimai \((\d+)\)$/, 'Seller’s listings ($1)'],
   [/^Įsiminti skelbimai \((\d+)\)$/, 'Saved listings ($1)'],
   [/^Užsakymai \((\d+) vykdomi\)$/, 'Orders ($1 in progress)'],
