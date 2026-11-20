@@ -21,6 +21,8 @@ interface State {
   threads: Thread[];
   /** The signed-in seller's own dismantled vehicles. */
   donors: Donor[];
+  /** Ids of people the signed-in person has blocked. Their listings and chats are hidden. */
+  blocked: string[];
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
   phone: string;
 }
@@ -35,6 +37,8 @@ interface Store extends State {
   registerDemo: (name: string, kind: SellerKind, phone: string) => void;
   signUp: (email: string, password: string, name: string, kind: SellerKind, phone: string) => Result;
   setPhone: (phone: string) => Result;
+  blockUser: (userId: string) => Result;
+  unblockUser: (userId: string) => Result;
   /** Sends a link for choosing a new password. */
   requestPasswordReset: (email: string) => Result;
   changePassword: (password: string) => Result;
@@ -69,8 +73,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '' }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '' };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [] };
 }
 
 let counter = 0;
@@ -88,6 +92,8 @@ const ERRORS: Record<string, string> = {
   offer_not_pending: 'Į šį pasiūlymą jau atsakyta.',
   not_allowed: 'Į savo pasiūlymą atsakyti negalima.',
   not_authenticated: 'Pirmiausia prisijunkite.',
+  user_blocked: 'Šiam naudotojui rašyti negalite: vienas iš jūsų užblokavo kitą.',
+  'row-level security': 'Šis veiksmas neleidžiamas. Jei rašote kitam naudotojui, gali būti, kad vienas iš jūsų užblokavo kitą.',
   phone_required: 'Įrašykite telefono numerį, pvz., +37061234567.',
   'Invalid login credentials': 'Neteisingas el. paštas arba slaptažodis.',
   'User already registered': ALREADY_REGISTERED,
@@ -176,7 +182,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const listings = (listingsRes.data ?? []).map(toListing);
     // Private seller data (purchase costs, donors, sale prices): the server returns only the user's own rows.
     let donors: Donor[] = [];
+    let blocked: string[] = [];
     if (uid) {
+      const blocksRes = await supabase.from('blocks').select('blocked_id');
+      blocked = (blocksRes.data ?? []).map((b: Row) => b.blocked_id);
       const [donorsRes, financeRes] = await Promise.all([
         supabase.from('donors').select('*').order('created_at', { ascending: false }),
         supabase.from('listing_finance').select('*'),
@@ -195,6 +204,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     const ids = new Set<string>();
     listings.forEach((l) => ids.add(l.sellerId));
+    blocked.forEach((id) => ids.add(id));
     threads.forEach((t) => {
       ids.add(t.buyerId);
       ids.add(t.sellerId);
@@ -204,7 +214,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '' });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked });
   }, []);
 
   useEffect(() => {
@@ -270,6 +280,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (error) return { kind: 'error', message: explain(error) };
       await refresh();
       return { kind: params.get('type') === 'recovery' ? 'recovery' : 'signedIn' };
+    };
+
+    const blockUser: Store['blockUser'] = async (userId) => {
+      const { me } = stateRef.current;
+      if (supabase) {
+        const { error } = await supabase.from('blocks').upsert({ blocker_id: me.id, blocked_id: userId }, { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true });
+        if (error) return explain(error);
+      }
+      setState((s) => (s.blocked.includes(userId) ? s : { ...s, blocked: [...s.blocked, userId] }));
+      return null;
+    };
+
+    const unblockUser: Store['unblockUser'] = async (userId) => {
+      const { me } = stateRef.current;
+      if (supabase) {
+        const { error } = await supabase.from('blocks').delete().eq('blocker_id', me.id).eq('blocked_id', userId);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, blocked: s.blocked.filter((id) => id !== userId) }));
+      return null;
     };
 
     const setPhone: Store['setPhone'] = async (phone) => {
@@ -565,12 +595,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
   const value = useMemo<Store>(
     () => ({
       ...state,
+      // People I blocked disappear from what I see: their listings and our chats.
+      listings: state.blocked.length ? state.listings.filter((l) => !state.blocked.includes(l.sellerId)) : state.listings,
+      threads: state.blocked.length ? state.threads.filter((t) => !state.blocked.includes(t.buyerId) && !state.blocked.includes(t.sellerId)) : state.threads,
       ...actions,
       live,
       myCar,

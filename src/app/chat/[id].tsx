@@ -17,7 +17,7 @@ const STATUS_TEXT: Record<NonNullable<Message['status']>, string> = {
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer } = useStore();
+  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer, blockUser } = useStore();
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -117,6 +117,15 @@ export default function ChatScreen() {
           ) : null}
           {error ? <Notice tone="warn">{error}</Notice> : null}
           {live ? null : <Muted>Bandomasis režimas: pokalbis lieka tik šiame įrenginyje.</Muted>}
+          <Button
+            label={`Blokuoti „${other.name}“`}
+            kind="quiet"
+            onPress={async () => {
+              const problem = await blockUser(other.id);
+              if (problem) return setError(problem);
+              router.back();
+            }}
+          />
         </ScrollView>
 
         <View style={{ flexDirection: 'row', gap: 8, padding: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border }}>

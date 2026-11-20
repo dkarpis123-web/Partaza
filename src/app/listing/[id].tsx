@@ -12,7 +12,8 @@ import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser } = useStore();
+  const [confirmBlock, setConfirmBlock] = useState(false);
   const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
   const [shown, setShown] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -188,6 +189,28 @@ export default function ListingScreen() {
         <Muted>{live ? 'Ačiū, pranešimas užregistruotas.' : 'Pažymėta. Bandomuoju režimu pranešimai niekur nesiunčiami.'}</Muted>
       ) : (
         <Button label="Pranešti apie skelbimą" kind="quiet" onPress={sendReport} />
+      )}
+      {mine ? null : confirmBlock ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Blokuoti „{seller.name}“?</Text>
+          <Muted>Nebematysite šio pardavėjo skelbimų ir pokalbių su juo, o jis nebegalės jums rašyti. Atblokuoti galima profilyje.</Muted>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button label="Atšaukti" kind="outline" onPress={() => setConfirmBlock(false)} style={{ flex: 1 }} />
+            <Button
+              label="Blokuoti"
+              kind="dark"
+              style={{ flex: 1 }}
+              onPress={async () => {
+                if (live && !registered) return router.push('/register');
+                const problem = await blockUser(seller.id);
+                if (problem) return setError(problem);
+                router.back();
+              }}
+            />
+          </View>
+        </Card>
+      ) : (
+        <Button label="Blokuoti pardavėją" kind="quiet" onPress={() => setConfirmBlock(true)} />
       )}
     </Page>
   );

@@ -11,7 +11,7 @@ import { MAX_WIDTH, colors, money } from '@/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, blocked, unblockUser, userById } = useStore();
   const [now] = useState(() => Date.now());
   const stale = staleListings(listings, me.id, now);
   const [phoneText, setPhoneText] = useState<string | null>(null);
@@ -99,6 +99,18 @@ export default function ProfileScreen() {
       ) : (
         <ListingGrid listings={mine} width={Math.min(width, MAX_WIDTH)} />
       )}
+
+      {blocked.length > 0 ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Užblokuoti naudotojai ({blocked.length})</Text>
+          {blocked.map((id) => (
+            <View key={id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <Text style={{ fontSize: 14, color: colors.ink, flex: 1 }}>{userById(id).name}</Text>
+              <Button label="Atblokuoti" kind="outline" onPress={async () => show(await unblockUser(id))} />
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       {error ? <Notice tone="warn">{error}</Notice> : null}
       <Notice>Balansas, užsakymai ir atsiliepimai atsiras, kai bus prijungti mokėjimai.</Notice>

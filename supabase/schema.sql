@@ -431,3 +431,106 @@ alter table public.listings add column if not exists whole_vehicle boolean not n
 
 -- 0.5: kada pardavėjas paskutinį kartą sumažino kainą (nuo čia skaičiuojamas 90 dienų priminimas)
 alter table public.listings add column if not exists refreshed_at timestamptz;
+
+-- ---------------------------------------------------------------------------
+-- 0.5: naudotojų blokavimas („App Store“ reikalavimas turiniui, kurį kuria naudotojai)
+-- ---------------------------------------------------------------------------
+-- Užblokavus: abi pusės nebegali pradėti pokalbio, rašyti žinučių ir siūlyti kainos viena kitai.
+
+create table if not exists public.blocks (
+  blocker_id uuid not null references public.profiles (id) on delete cascade,
+  blocked_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+
+grant select, insert, delete on public.blocks to authenticated;
+alter table public.blocks enable row level security;
+
+drop policy if exists blocks_own on public.blocks;
+create policy blocks_own on public.blocks for all to authenticated
+  using (blocker_id = (select auth.uid())) with check (blocker_id = (select auth.uid()));
+
+create or replace function public.blocked_with(p_other uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.blocks b
+    where (b.blocker_id = (select auth.uid()) and b.blocked_id = p_other)
+       or (b.blocker_id = p_other and b.blocked_id = (select auth.uid()))
+  );
+$$;
+revoke all on function public.blocked_with(uuid) from public, anon;
+grant execute on function public.blocked_with(uuid) to authenticated;
+
+drop policy if exists threads_insert_buyer on public.threads;
+create policy threads_insert_buyer on public.threads for insert to authenticated
+  with check (
+    buyer_id = (select auth.uid())
+    and seller_id = (select l.seller_id from public.listings l where l.id = listing_id and l.status = 'active')
+    and not public.blocked_with(seller_id)
+  );
+
+drop policy if exists messages_insert_text on public.messages;
+create policy messages_insert_text on public.messages for insert to authenticated
+  with check (
+    kind = 'text'
+    and sender_id = (select auth.uid())
+    and exists (
+      select 1 from public.threads t
+      where t.id = thread_id
+        and (select auth.uid()) in (t.buyer_id, t.seller_id)
+        and not public.blocked_with(case when t.buyer_id = (select auth.uid()) then t.seller_id else t.buyer_id end)
+    )
+  );
+
+create or replace function public.send_offer(p_thread uuid, p_amount numeric, p_body text default null)
+returns public.messages
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me uuid := (select auth.uid());
+  v_thread public.threads;
+  v_listing public.listings;
+  v_message public.messages;
+begin
+  if v_me is null then
+    raise exception 'not_authenticated';
+  end if;
+  select * into v_thread from public.threads where id = p_thread;
+  if not found or v_me not in (v_thread.buyer_id, v_thread.seller_id) then
+    raise exception 'not_a_participant';
+  end if;
+  if public.blocked_with(case when v_thread.buyer_id = v_me then v_thread.seller_id else v_thread.buyer_id end) then
+    raise exception 'user_blocked';
+  end if;
+  select * into v_listing from public.listings where id = v_thread.listing_id;
+  if v_listing.status <> 'active' then
+    raise exception 'listing_not_active';
+  end if;
+  if not v_listing.allow_offers then
+    raise exception 'offers_not_allowed';
+  end if;
+  if p_amount is null or p_amount <= 0 or p_amount >= v_listing.price then
+    raise exception 'amount_out_of_range';
+  end if;
+
+  update public.messages
+    set status = 'countered'
+    where thread_id = p_thread and kind = 'offer' and status = 'pending';
+
+  insert into public.messages (thread_id, sender_id, kind, body, amount, status)
+  values (p_thread, v_me, 'offer', nullif(trim(coalesce(p_body, '')), ''), round(p_amount, 2), 'pending')
+  returning * into v_message;
+  return v_message;
+end;
+$$;
+revoke all on function public.send_offer(uuid, numeric, text) from public, anon;
+grant execute on function public.send_offer(uuid, numeric, text) to authenticated;
