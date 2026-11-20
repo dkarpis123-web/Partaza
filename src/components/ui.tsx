@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { MAX_WIDTH, colors, radius } from '@/theme';
+import { VehicleIcon, type VehicleIconName } from '@/components/VehicleIcon';
 
 /** Scrollable page with a centred, width-limited column (works on phone and desktop). */
 export function Page({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
@@ -76,17 +77,20 @@ export function Button({
   );
 }
 
-export function Chip({ label, selected, onPress }: { label: string; selected?: boolean; onPress?: () => void }) {
+export function Chip({ label, selected, onPress, icon }: { label: string; selected?: boolean; onPress?: () => void; icon?: VehicleIconName }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ selected: !!selected }}
       onPress={onPress}
       style={{
         minHeight: 44, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center',
+        flexDirection: 'row', alignItems: 'center', gap: 6,
         backgroundColor: selected ? colors.ink : colors.surface,
         borderWidth: 1, borderColor: selected ? colors.ink : colors.border,
       }}>
+      {icon ? <VehicleIcon name={icon} size={20} color={selected ? '#FFFFFF' : colors.ink} aria-hidden /> : null}
       <Text style={{ color: selected ? '#FFFFFF' : colors.ink, fontSize: 14, fontWeight: selected ? '600' : '500' }}>{label}</Text>
     </Pressable>
   );

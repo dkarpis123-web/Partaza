@@ -7,6 +7,7 @@ import { Button, Chip, Heading, Muted, Notice, Page } from '@/components/ui';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { VEHICLE_LABELS, VehicleType } from '@/types';
+import { VEHICLE_ICONS } from '@/components/VehicleIcon';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 
@@ -43,9 +44,9 @@ export default function HomeScreen() {
         <Button label="Ieškoti" kind="dark" onPress={search} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Chip label="Visi" selected={type === null} onPress={() => setType(null)} />
+        <Chip icon="view-grid-outline" label="Visi" selected={type === null} onPress={() => setType(null)} />
         {TYPES.map((t) => (
-          <Chip key={t} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
+          <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
         ))}
       </ScrollView>
       {live ? null : <Notice tone="warn">Bandomoji versija: skelbimai pavyzdiniai, niekas neparduodama ir niekur nesaugoma.</Notice>}

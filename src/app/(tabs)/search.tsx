@@ -8,6 +8,7 @@ import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, VEHICLE_LABELS, VehicleType } from '@/types';
+import { VEHICLE_ICONS } from '@/components/VehicleIcon';
 
 type Sort = 'cheapest' | 'newest' | 'place';
 const SORT_LABELS: Record<Sort, string> = {
@@ -157,9 +158,9 @@ export default function SearchScreen() {
         <Chip label={showFilters ? 'Slėpti filtrus' : 'Vieta, gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
         <Chip label="Istoriniai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
         <Chip label="Visas automobilis" selected={onlyWhole} onPress={() => setOnlyWhole((v) => !v)} />
-        <Chip label="Visi" selected={type === null} onPress={() => setType(null)} />
+        <Chip icon="view-grid-outline" label="Visi" selected={type === null} onPress={() => setType(null)} />
         {TYPES.map((t) => (
-          <Chip key={t} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
+          <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
         ))}
       </ScrollView>
 
