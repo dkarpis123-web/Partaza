@@ -92,6 +92,8 @@ interface Store extends State {
   /** Saves the proposed texts the seller confirmed. */
   applyFix: (listingId: string, fields: Partial<Omit<ListingFix, 'notes'>>) => Result;
   aiShipping: (part: { title: string; oem: string; fits: string; from: string; to: string }) => Promise<{ estimate?: ShippingEstimate; error?: string }>;
+  /** Asks the server to check a listing that is waiting; resolves when its status is known. */
+  checkListing: (listingId: string) => Promise<void>;
   aiPrices: (part: { title: string; oem: string; fits: string; condition: string; defects: boolean; country: string }) => Promise<{ prices?: WebPrices; error?: string }>;
   /** Follows or unfollows a seller. */
   toggleFollow: (sellerId: string) => Result;
@@ -167,6 +169,7 @@ const ERRORS: Record<string, string> = {
   own_listing: 'Savo skelbimo pirkti negalima.',
   not_allowed: 'Šio veiksmo dabar atlikti negalima.',
   already_reviewed: 'Šį užsakymą jau įvertinote.',
+  too_many_listings: 'Per valandą įdėjote per daug skelbimų. Pabandykite vėliau.',
   vat_code_required: 'Kainą su PVM gali nurodyti tik pardavėjas, patvirtinęs PVM mokėtojo kodą profilyje.',
   bad_stars: 'Pasirinkite nuo 1 iki 5 žvaigždučių.',
   user_blocked: 'Šiam naudotojui rašyti negalite: vienas iš jūsų užblokavo kitą.',
@@ -215,7 +218,8 @@ function toListing(row: Row): Listing {
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad), photoMarks: row.photo_marks && typeof row.photo_marks === 'object' ? row.photo_marks : {},
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
-    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
+    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : row.status === 'pending' ? 'pending' : row.status === 'rejected' ? 'rejected' : 'active',
+    moderationNote: row.moderation_note ?? null,
   };
 }
 
@@ -758,6 +762,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { prices: { found: data.found === true, low: data.low, typical: data.typical, high: data.high, note: data.note ?? '', sources: data.sources ?? [] } };
     };
 
+    // Every new or edited listing is checked on the server before buyers can see it.
+    const checkListing: Store['checkListing'] = async (listingId) => {
+      if (!supabase) return;
+      setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId && (l.status ?? 'active') !== 'sold' && l.status !== 'reserved' ? { ...l, status: 'pending' as const, moderationNote: null } : l)) }));
+      try {
+        const { data } = await supabase.functions.invoke('moderate', { body: { listing_id: listingId, lang: getLang() } });
+        const status = data?.status;
+        if (status === 'active' || status === 'rejected' || status === 'pending' || status === 'sold' || status === 'reserved') {
+          setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, status, moderationNote: data?.note ?? null } : l)) }));
+        }
+      } catch {
+        // Stays "being checked"; the server retries on its own every few minutes.
+      }
+    };
+
     const aiShipping: Store['aiShipping'] = async (part) => {
       const { data, error } = await askAi({ action: 'shipping', ...part });
       if (!data) return { error };
@@ -778,6 +797,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (error) return explain(error);
       }
       setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, ...fields } : l)) }));
+      await checkListing(listingId);
       return null;
     };
 
@@ -861,6 +881,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (error) return explain(error);
       }
       setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, photos: urls, photoMarks } : l)) }));
+      await checkListing(listingId);
       return null;
     };
 
@@ -957,6 +978,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setState((s) => ({ ...s, listings: [listing, ...s.listings] }));
+      await checkListing(listing.id);
       return { id: listing.id };
     };
 
@@ -985,6 +1007,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         ...s,
         listings: s.listings.map((l) => (l.id === listingId ? { ...l, ...draft, photos: urls, photoMarks: remapMarks(draft.photoMarks, draft.photos, urls), donorId: draft.donorId ?? null, cost: draft.cost ?? null } : l)),
       }));
+      await checkListing(listingId);
       return null;
     };
 
@@ -1162,7 +1185,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

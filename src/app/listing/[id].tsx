@@ -22,7 +22,7 @@ export default function ListingScreen() {
   const { place } = useGeo();
   const dest = useDestination().country;
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, checkListing, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
   const [buying, setBuying] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
@@ -30,6 +30,7 @@ export default function ListingScreen() {
   const [marksDraft, setMarksDraft] = useState<Marks>({});
   const [shown, setShown] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [soldText, setSoldText] = useState('');
   const [selling, setSelling] = useState(false);
   const [reported, setReported] = useState(false);
@@ -85,6 +86,7 @@ export default function ListingScreen() {
   };
 
   const status = listing.status ?? 'active';
+  const editable = status === 'active' || status === 'pending' || status === 'rejected';
   // The price the buyer would pay: an offer the seller (or the buyer) already accepted, otherwise the asking price.
   const myThread = threadForListing(listing.id);
   const acceptedOffer = myThread ? [...myThread.messages].reverse().find((m) => m.kind === 'offer' && m.status === 'accepted') : undefined;
@@ -107,7 +109,7 @@ export default function ListingScreen() {
       footer={
         mine ? (
           <Muted>
-            {status === 'sold' ? 'Tai jūsų parduota dalis.' : status === 'reserved' ? 'Tai jūsų skelbimas. Jis rezervuotas pirkėjui – žr. „Užsakymai“.' : 'Tai jūsų skelbimas. Pirkėjai jį mato paieškoje.'}
+            {status === 'pending' ? 'Tai jūsų skelbimas. Jis dar tikrinamas – pirkėjai jo kol kas nemato.' : status === 'rejected' ? 'Tai jūsų skelbimas. Jis nepaskelbtas – pirkėjai jo nemato.' : status === 'sold' ? 'Tai jūsų parduota dalis.' : status === 'reserved' ? 'Tai jūsų skelbimas. Jis rezervuotas pirkėjui – žr. „Užsakymai“.' : 'Tai jūsų skelbimas. Pirkėjai jį mato paieškoje.'}
           </Muted>
         ) : status !== 'active' ? (
           <Muted>{openOrder ? 'Šią dalį perkate jūs – žr. „Užsakymai“ profilyje.' : status === 'sold' ? 'Ši dalis jau parduota.' : 'Ši dalis rezervuota kitam pirkėjui.'}</Muted>
@@ -166,7 +168,16 @@ export default function ListingScreen() {
         </View>
       ) : null}
 
-      {mine && status === 'active' ? (
+      {mine && status === 'pending' ? (
+        <>
+          <Notice>Skelbimas tikrinamas: žiūrime, ar tai tikras transporto priemonės ar jos dalies skelbimas. Paprastai tai trunka kelias sekundes. Kol patikra nebaigta, pirkėjai skelbimo nemato.</Notice>
+          <Button label={checking ? 'Tikrinama…' : 'Tikrinti dabar'} kind="outline" disabled={checking} onPress={async () => { setChecking(true); await checkListing(listing.id); setChecking(false); }} />
+        </>
+      ) : null}
+      {mine && status === 'rejected' ? (
+        <Notice tone="warn">{`${tr('Skelbimas nepaskelbtas.')} ${listing.moderationNote ?? ''} ${tr('Pataisykite skelbimą ir išsaugokite – patikrinsime iš naujo.')}`}</Notice>
+      ) : null}
+      {mine && editable ? (
         photoDraft === null ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button label="Redaguoti skelbimą" kind="outline" onPress={() => router.push({ pathname: '/sell/review', params: { edit: listing.id } })} style={{ flex: 1 }} />
@@ -198,7 +209,7 @@ export default function ListingScreen() {
         )
       ) : null}
 
-      {mine && live && status === 'active' && photoDraft === null ? <AiReview listing={listing} /> : null}
+      {mine && live && editable && photoDraft === null ? <AiReview listing={listing} /> : null}
 
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
       {mine ? null : (

@@ -1033,3 +1033,69 @@ end;
 $$;
 revoke all on function public.leave_review(text, uuid, integer, text) from public, anon;
 grant execute on function public.leave_review(text, uuid, integer, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Listing check: whatever a seller writes waits ('pending') until the "moderate" edge function
+-- has looked at it. The seller cannot publish or approve a listing themselves; server code can.
+-- ---------------------------------------------------------------------------
+alter table public.listings drop constraint if exists listings_status_check;
+alter table public.listings add constraint listings_status_check
+  check (status in ('active', 'reserved', 'sold', 'hidden', 'pending', 'rejected'));
+alter table public.listings add column if not exists approved boolean not null default true;
+alter table public.listings add column if not exists moderation_note text;
+
+create or replace function public.listing_moderation_guard() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  -- Server code (edge functions with the service key, security-definer functions) is trusted.
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if (select count(*) from public.listings l where l.seller_id = new.seller_id and l.created_at > now() - interval '1 hour') >= 30 then
+      raise exception 'too_many_listings';
+    end if;
+    new.approved := false;
+    new.status := 'pending';
+    new.moderation_note := null;
+    return new;
+  end if;
+  -- The seller cannot approve their own listing or rewrite the checker's note.
+  new.approved := old.approved;
+  new.moderation_note := old.moderation_note;
+  if new.title is distinct from old.title or new.description is distinct from old.description
+     or new.photos is distinct from old.photos or new.oem is distinct from old.oem or new.fits is distinct from old.fits then
+    new.approved := false;
+    new.moderation_note := null;
+  end if;
+  if new.status = 'rejected' and old.status <> 'rejected' then
+    new.status := old.status;
+  end if;
+  if not new.approved and new.status in ('active', 'rejected') then
+    new.status := 'pending';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists listing_moderation_guard on public.listings;
+create trigger listing_moderation_guard before insert or update on public.listings
+  for each row execute function public.listing_moderation_guard();
+
+do $$
+declare
+  v_url text := current_setting('app.settings.functions_url', true);
+begin
+  if v_url is null or v_url = '' then
+    v_url := 'https://vpywtkqgbglqxufhzuct.supabase.co/functions/v1';
+  end if;
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron')
+     and exists (select 1 from pg_available_extensions where name = 'pg_net') then
+    perform cron.schedule(
+      'partaza-moderate-listings',
+      '*/5 * * * *',
+      format($job$select net.http_post(url := %L, body := '{"action":"sweep"}'::jsonb, headers := '{"Content-Type":"application/json"}'::jsonb)$job$, v_url || '/moderate')
+    );
+  end if;
+end;
+$$;

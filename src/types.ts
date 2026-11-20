@@ -103,7 +103,10 @@ export interface Listing {
   /** A whole vehicle sold for parts in one listing, instead of a single part. */
   wholeVehicle?: boolean;
   /** 'sold' listings are hidden from buyers and counted in the seller's dashboard. */
-  status?: 'active' | 'reserved' | 'sold';
+  /** 'pending' = waiting for the automatic check, 'rejected' = turned down by it; buyers see neither. */
+  status?: 'active' | 'reserved' | 'sold' | 'pending' | 'rejected';
+  /** Why the check turned the listing down. */
+  moderationNote?: string | null;
   /* The fields below are private: only the seller ever receives them. */
   /** Dismantled vehicle this part came from, if any. */
   donorId?: string | null;
