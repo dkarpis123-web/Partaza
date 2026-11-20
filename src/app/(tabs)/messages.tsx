@@ -8,7 +8,7 @@ import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
 
 export default function MessagesScreen() {
-  const { threads, listingById, userById, me } = useStore();
+  const { threads, listingById, userById, me, unreadThreadIds } = useStore();
   return (
     <Page>
       <Heading>Žinutės ir derybos</Heading>
@@ -20,6 +20,7 @@ export default function MessagesScreen() {
         const listing = listingById(thread.listingId);
         if (!listing) return null;
         const last = thread.messages[thread.messages.length - 1];
+        const unread = unreadThreadIds.includes(thread.id);
         const preview = !last
           ? 'Pokalbis pradėtas'
           : last.kind === 'offer'
@@ -32,7 +33,7 @@ export default function MessagesScreen() {
               style={{ padding: 14, gap: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg }}>
               <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>{userById(thread.sellerId === me.id ? thread.buyerId : thread.sellerId).name}{thread.sellerId === me.id ? ' · pirkėjas' : ''}</Text>
               <Text style={{ fontSize: 13, color: colors.muted }}>{listing.title} · {money(listing.price)}</Text>
-              <Text numberOfLines={1} style={{ fontSize: 14, color: colors.ink }}>{preview}</Text>
+              <Text numberOfLines={1} style={{ fontSize: 14, color: colors.ink, fontWeight: unread ? '700' : '400' }}>{unread ? 'Nauja · ' : ''}{preview}</Text>
             </Pressable>
           </Link>
         );

@@ -31,6 +31,9 @@ type Result = Promise<string | null>;
 
 interface Store extends State {
   live: boolean;
+  /** Threads whose latest message came from the other person and has not been opened yet (tracked on this device). */
+  unreadThreadIds: string[];
+  markRead: (threadId: string) => void;
   /** Saved on this device only; never sent to the server. */
   myCar: MyCar | null;
   setMyCar: (car: MyCar | null) => void;
@@ -153,6 +156,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     stateRef.current = state;
   });
+
+  // When each thread was last opened on this device.
+  const [lastRead, setLastRead] = useState<Record<string, number>>({});
+  useEffect(() => {
+    AsyncStorage.getItem('partaza.lastRead')
+      .then((raw) => {
+        if (raw) setLastRead(JSON.parse(raw));
+      })
+      .catch(() => {});
+  }, []);
+  const markRead = useCallback((threadId: string) => {
+    setLastRead((current) => {
+      const thread = stateRef.current.threads.find((t) => t.id === threadId);
+      const latest = thread && thread.messages.length > 0 ? thread.messages[thread.messages.length - 1].at : 0;
+      if (!latest || (current[threadId] ?? 0) >= latest) return current;
+      const next = { ...current, [threadId]: latest };
+      AsyncStorage.setItem('partaza.lastRead', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
 
   const [myCar, setMyCarState] = useState<MyCar | null>(null);
   useEffect(() => {
@@ -598,6 +621,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { registerDemo, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
+  const unreadThreadIds = useMemo(
+    () =>
+      state.threads
+        .filter((t) => !state.blocked.includes(t.buyerId) && !state.blocked.includes(t.sellerId))
+        .filter((t) => {
+          const last = t.messages[t.messages.length - 1];
+          return !!last && last.senderId !== state.me.id && last.at > (lastRead[t.id] ?? 0);
+        })
+        .map((t) => t.id),
+    [state.threads, state.blocked, state.me.id, lastRead],
+  );
+
   const value = useMemo<Store>(
     () => ({
       ...state,
@@ -606,6 +641,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       threads: state.blocked.length ? state.threads.filter((t) => !state.blocked.includes(t.buyerId) && !state.blocked.includes(t.sellerId)) : state.threads,
       ...actions,
       live,
+      unreadThreadIds,
+      markRead,
       myCar,
       setMyCar,
       refresh,
@@ -614,7 +651,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       threadById: (id) => state.threads.find((t) => t.id === id),
       threadForListing: (listingId) => state.threads.find((t) => t.listingId === listingId && t.buyerId === state.me.id),
     }),
-    [state, actions, refresh, myCar, setMyCar],
+    [state, actions, refresh, myCar, setMyCar, unreadThreadIds, markRead],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

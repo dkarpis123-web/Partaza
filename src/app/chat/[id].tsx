@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Button, Muted, Notice } from '@/components/ui';
@@ -17,11 +17,16 @@ const STATUS_TEXT: Record<NonNullable<Message['status']>, string> = {
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer, blockUser } = useStore();
+  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer, blockUser, markRead } = useStore();
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const thread = threadById(id);
+  const messageCount = thread?.messages.length ?? 0;
+  // Opening the chat, or receiving a message while it is open, counts as reading it.
+  useEffect(() => {
+    if (messageCount > 0) markRead(id);
+  }, [id, messageCount, markRead]);
   const listing = thread ? listingById(thread.listingId) : undefined;
 
   if (!thread || !listing) {

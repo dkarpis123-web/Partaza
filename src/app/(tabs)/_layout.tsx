@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import type { ColorValue } from 'react-native';
 
+import { useStore } from '@/store';
 import { colors } from '@/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -16,6 +17,8 @@ function icon(name: IconName) {
 }
 
 export default function TabsLayout() {
+  const { unreadThreadIds } = useStore();
+  const unread = unreadThreadIds.length;
   return (
     <Tabs
       screenOptions={{
@@ -28,7 +31,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Pradžia', headerTitle: 'Partaza', tabBarIcon: icon('home-outline') }} />
       <Tabs.Screen name="search" options={{ title: 'Paieška', tabBarIcon: icon('search-outline') }} />
       <Tabs.Screen name="sell" options={{ title: 'Parduoti', tabBarIcon: icon('add-circle-outline') }} />
-      <Tabs.Screen name="messages" options={{ title: 'Žinutės', tabBarIcon: icon('chatbubble-outline') }} />
+      <Tabs.Screen name="messages" options={{ title: 'Žinutės', tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `Žinutės, neskaitytų pokalbių: ${unread}` : 'Žinutės' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profilis', tabBarIcon: icon('person-outline') }} />
     </Tabs>
   );
