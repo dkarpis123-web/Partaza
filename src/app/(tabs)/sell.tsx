@@ -124,7 +124,7 @@ export default function SellScreen() {
           return (
             <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               {uri ? (
-                <Image source={{ uri }} accessibilityLabel={label} style={{ width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.placeholder }} />
+                <Image source={{ uri }} accessibilityLabel={label} resizeMode="contain" style={{ width: 88, height: 88, borderRadius: radius.sm, backgroundColor: colors.ink }} />
               ) : (
                 <View style={{ width: 64, height: 64, borderRadius: radius.sm, backgroundColor: colors.placeholder }} />
               )}

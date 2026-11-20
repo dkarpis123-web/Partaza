@@ -10,9 +10,10 @@ import { colors, money, radius } from '@/theme';
 import { CONDITION_LABELS, Listing } from '@/types';
 import { Text } from '@/components/Text';
 
-export function Photo({ uri, height }: { uri?: string; height: number }) {
+/** whole: show the entire photo (nothing cut off, e.g. a part number at the edge); otherwise it fills the frame. */
+export function Photo({ uri, height, whole = false }: { uri?: string; height: number; whole?: boolean }) {
   if (uri) {
-    return <Image source={{ uri }} accessibilityLabel="Dalies nuotrauka" style={{ width: '100%', height, backgroundColor: colors.placeholder }} />;
+    return <Image source={{ uri }} accessibilityLabel="Dalies nuotrauka" resizeMode={whole ? 'contain' : 'cover'} style={{ width: '100%', height, backgroundColor: whole ? colors.ink : colors.placeholder }} />;
   }
   return (
     <View style={{ height, backgroundColor: colors.placeholder, alignItems: 'center', justifyContent: 'center' }}>

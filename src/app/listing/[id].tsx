@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Linking, Platform, View } from 'react-native';
 
 import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
@@ -118,12 +118,23 @@ export default function ListingScreen() {
         )
       }>
       <View style={{ borderRadius: 14, overflow: 'hidden' }}>
-        <Photo uri={listing.photos[Math.min(shown, Math.max(0, listing.photos.length - 1))]} height={260} />
+        <Photo whole uri={listing.photos[Math.min(shown, Math.max(0, listing.photos.length - 1))]} height={340} />
         <View style={{ position: 'absolute', left: 12, bottom: 12 }}>
           <DefectBadge hasDefects={hasDefects} count={listing.defects.length} />
         </View>
       </View>
 
+      {listing.photos.length > 0 ? (
+        <Button
+          label="Atidaryti visą nuotrauką"
+          kind="quiet"
+          onPress={() => {
+            const uri = listing.photos[Math.min(shown, listing.photos.length - 1)];
+            if (Platform.OS === 'web') window.open(uri, '_blank', 'noopener');
+            else Linking.openURL(uri);
+          }}
+        />
+      ) : null}
       {listing.photos.length > 1 ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {listing.photos.map((uri, index) => (

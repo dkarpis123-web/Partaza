@@ -86,6 +86,7 @@ export const EN: Record<string, string> = {
   'Naudotojas': 'User',
 
   // Listing page
+  'Atidaryti visą nuotrauką': 'Open the full photo',
   'Įsiminti skelbimą': 'Save listing',
   'Įsiminta – pašalinti': 'Saved – remove',
   'Būklė': 'Condition',

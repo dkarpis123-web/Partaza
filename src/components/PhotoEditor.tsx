@@ -36,7 +36,7 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           {photos.map((uri, index) => (
             <View key={`${uri}-${index}`} style={{ alignItems: 'center', gap: 4 }}>
-              <Image source={{ uri }} accessibilityLabel={`Nuotrauka ${index + 1}`} style={{ width: 96, height: 96, borderRadius: radius.md, backgroundColor: colors.placeholder }} />
+              <Image source={{ uri }} accessibilityLabel={`Nuotrauka ${index + 1}`} resizeMode="contain" style={{ width: 132, height: 132, borderRadius: radius.md, backgroundColor: colors.ink }} />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Pašalinti nuotrauką ${index + 1}`}
