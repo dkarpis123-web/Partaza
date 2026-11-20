@@ -375,6 +375,12 @@ export const EN: Record<string, string> = {
 
   'Ieškoma čia': 'Searching in',
   'Ieškoti šalies': 'Find a country',
+  'Gavėjo šalis': 'Recipient country',
+  'Nenurodyta': 'Not set',
+  'Nurodyti': 'Set',
+  'Naudoti mano vietos šalį': 'Use the country I am in',
+  'Išvalyti gavėjo šalį': 'Clear recipient country',
+  'Kad rikiuotume kartu su siuntimo kaina, nurodykite gavėjo šalį arba leiskite naudoti vietą. Dabar rikiuojama tik pagal dalies kainą.': 'To sort with the shipping price included, set the recipient country or allow location. Right now sorting uses the part price only.',
   'Pvz., Latvija': 'E.g. Latvia',
   'Visos šalys': 'All countries',
   'Keisti': 'Change',

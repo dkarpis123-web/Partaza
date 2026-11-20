@@ -7,7 +7,7 @@ import { CarPicker } from '@/components/CarPicker';
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
-import { countryLabel, countryName, useGeo } from '@/services/geo';
+import { COUNTRIES, countryLabel, countryName, setDestination, useDestination, useGeo } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
 import { newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
@@ -86,6 +86,10 @@ export default function SearchScreen() {
   const home = useGeo().place?.country ?? null;
   const [suggestedFor, setSuggestedFor] = useState<string | null | undefined>(undefined);
   const [editPlace, setEditPlace] = useState(false);
+  const { country: dest, manual: manualDest } = useDestination();
+  const [editDest, setEditDest] = useState(false);
+  const [destFilter, setDestFilter] = useState('');
+  const destChoices = COUNTRIES.filter((c) => normalize(countryName(c)).includes(normalize(destFilter))).slice(0, destFilter.trim() ? 12 : 8);
   if (countries.length > 0 && suggestedFor !== home) {
     setSuggestedFor(home);
     if (home && countries.includes(home) && (country === null || country === suggestedFor)) setCountry(home);
@@ -162,14 +166,14 @@ export default function SearchScreen() {
       if (sort === 'newest') return b.createdAt - a.createdAt;
       if (sort === 'place') return `${countryName(a.country)} ${a.city}`.localeCompare(`${countryName(b.country)} ${b.city}`, 'lt');
       // With a destination: known totals first, cheapest first; the rest after them by price alone.
-      const ta = totalPrice(a, home);
-      const tb = totalPrice(b, home);
+      const ta = totalPrice(a, dest);
+      const tb = totalPrice(b, dest);
       if (ta !== null && tb !== null) return ta - tb;
       if (ta !== null) return -1;
       if (tb !== null) return 1;
       return a.price - b.price;
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit, home]);
+  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit, dest]);
 
   return (
     <Page>
@@ -305,7 +309,32 @@ export default function SearchScreen() {
             <Chip label="Tik be defektų" selected={onlyNoDefects} onPress={() => setOnlyNoDefects((v) => !v)} />
           </View>
           <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Rikiuoti</Text>
-          <Muted>{home ? `${tr('Kaina su siuntimu skaičiuojama pristatymui į')}: ${countryLabel(home)}. ${tr('Kitų šalių skelbimams ir skelbimams be siuntimo kainos rodoma tik dalies kaina.')}` : tr('Kad rikiuotume kartu su siuntimo kaina, leiskite naudoti vietą – tada žinosime gavėjo šalį. Dabar rikiuojama tik pagal dalies kainą.')}</Muted>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, color: colors.muted }}>Gavėjo šalis</Text>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{dest ? countryLabel(dest) : tr('Nenurodyta')}</Text>
+            </View>
+            <Button label={editDest ? 'Gerai' : dest ? 'Keisti' : 'Nurodyti'} kind="outline" onPress={() => setEditDest((v) => !v)} />
+          </View>
+          {editDest ? (
+            <>
+              <TextInput
+                accessibilityLabel="Gavėjo šalis"
+                placeholder="Ieškoti šalies"
+                placeholderTextColor={colors.muted}
+                value={destFilter}
+                onChangeText={setDestFilter}
+                style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
+              />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {destChoices.map((c) => (
+                  <Chip key={c} label={countryLabel(c)} selected={dest === c} onPress={() => { setDestination(c); setEditDest(false); setDestFilter(''); }} />
+                ))}
+              </View>
+              {manualDest ? <Button label={home ? 'Naudoti mano vietos šalį' : 'Išvalyti gavėjo šalį'} kind="quiet" onPress={() => { setDestination(null); setEditDest(false); }} /> : null}
+            </>
+          ) : null}
+          <Muted>{dest ? `${tr('Kaina su siuntimu skaičiuojama pristatymui į')}: ${countryLabel(dest)}. ${tr('Kitų šalių skelbimams ir skelbimams be siuntimo kainos rodoma tik dalies kaina.')}` : tr('Kad rikiuotume kartu su siuntimo kaina, nurodykite gavėjo šalį arba leiskite naudoti vietą. Dabar rikiuojama tik pagal dalies kainą.')}</Muted>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
               <Chip key={s} label={SORT_LABELS[s]} selected={sort === s} onPress={() => setSort(s)} />

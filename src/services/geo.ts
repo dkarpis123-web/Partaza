@@ -110,3 +110,38 @@ export async function allowLocation(): Promise<Place | null> {
     return null;
   }
 }
+
+// The country a buyer wants parts delivered to. Their own choice wins over the detected place.
+const DEST_KEY = 'partaza.dest';
+let manualDest: string | null = null;
+let destLoaded = false;
+const destListeners = new Set<() => void>();
+const subscribeDest = (listener: () => void) => {
+  destListeners.add(listener);
+  if (!destLoaded) {
+    destLoaded = true;
+    AsyncStorage.getItem(DEST_KEY)
+      .then((saved) => {
+        if (saved && COUNTRY_NAMES[saved]) {
+          manualDest = saved;
+          destListeners.forEach((l) => l());
+        }
+      })
+      .catch(() => {});
+  }
+  return () => destListeners.delete(listener);
+};
+
+/** Delivery country: `manual` is what the buyer picked by hand, `country` is that or, failing it, where they are. */
+export function useDestination(): { country: string | null; manual: string | null } {
+  const manual = useSyncExternalStore(subscribeDest, () => manualDest, () => null);
+  const detected = useGeo().place?.country ?? null;
+  return { country: manual ?? detected, manual };
+}
+
+/** Sets the delivery country by hand; null goes back to the detected place. */
+export function setDestination(code: string | null) {
+  manualDest = code;
+  destListeners.forEach((l) => l());
+  (code ? AsyncStorage.setItem(DEST_KEY, code) : AsyncStorage.removeItem(DEST_KEY)).catch(() => {});
+}

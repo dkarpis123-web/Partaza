@@ -6,7 +6,7 @@ import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
-import { countryLabel, countryName, useGeo } from '@/services/geo';
+import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
@@ -15,6 +15,7 @@ import { Text } from '@/components/Text';
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { place } = useGeo();
+  const dest = useDestination().country;
   const router = useRouter();
   const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
   const [buying, setBuying] = useState(false);
@@ -63,11 +64,11 @@ export default function ListingScreen() {
     if (live && !registered) return router.push('/register');
     const opened = await openThread(listing.id);
     if (!opened.id) return setError(opened.error ?? 'Nepavyko pradėti pokalbio.');
-    const where = place?.country ? `${place.city ? `${place.city}, ` : ''}${countryName(place.country)}` : '';
+    const where = dest ? `${place?.city && place.country === dest ? `${place.city}, ` : ''}${countryName(dest)}` : '';
     await sendText(opened.id, where ? `Sveiki, kiek kainuotų šios dalies siuntimas į ${where}?` : 'Sveiki, kiek kainuotų šios dalies siuntimas? Parašysiu, kur siųsti.');
     router.push(`/chat/${opened.id}`);
   };
-  const abroad = !!place?.country && place.country !== listing.country;
+  const abroad = !!dest && dest !== listing.country;
 
   const sendReport = async () => {
     if (live && !registered) return router.push('/register');
