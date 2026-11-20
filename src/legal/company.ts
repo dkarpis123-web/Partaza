@@ -24,14 +24,14 @@ export const TERMS: LegalSection[] = [
     title: '1. Kas mes ir kas yra „Partaza“',
     paragraphs: [
       `„Partaza“ (${COMPANY.site}) yra skelbimų platforma naujoms ir naudotoms transporto priemonių dalims. Ją valdo ${COMPANY.name}, juridinio asmens kodas ${COMPANY.code}, PVM mokėtojo kodas ${COMPANY.vat}, buveinė ${COMPANY.address}.`,
-      'Platforma veikia bandomuoju laikotarpiu: funkcijos gali keistis, o kai kurios dar neveikia (mokėjimai per platformą, siuntų užsakymas, pirkėjo apsauga).',
+      'Platforma veikia bandomuoju laikotarpiu: funkcijos gali keistis, o kai kurios dar neveikia (siuntų užsakymas, atsiliepimai).',
     ],
   },
   {
     title: '2. Mūsų vaidmuo',
     paragraphs: [
       'Mes suteikiame vietą skelbimams ir susirašinėjimui. Pirkimo–pardavimo sutartį sudaro pirkėjas ir pardavėjas tarpusavyje; mes nesame šios sutarties šalis, dalių neparduodame, netikriname ir nesaugome.',
-      'Kol mokėjimai per platformą neįjungti, dėl apmokėjimo ir pristatymo pirkėjas ir pardavėjas susitaria patys. Už tokius atsiskaitymus mes neatsakome.',
+      'Jeigu pirkėjas ir pardavėjas atsiskaito ne per platformą, dėl apmokėjimo ir pristatymo jie susitaria patys. Už tokius atsiskaitymus mes neatsakome.',
     ],
   },
   {
@@ -54,7 +54,11 @@ export const TERMS: LegalSection[] = [
   {
     title: '5. Derybos ir susitarimas',
     paragraphs: [
-      'Pirkėjas gali pasiūlyti savo kainą, o pardavėjas ją priimti, atmesti arba pasiūlyti kitą. Priimtas pasiūlymas reiškia, kad šalys susitarė dėl kainos; dėl apmokėjimo ir perdavimo jos susitaria tarpusavyje.',
+      'Pirkėjas gali pasiūlyti savo kainą, o pardavėjas ją priimti, atmesti arba pasiūlyti kitą. Priimtas pasiūlymas reiškia, kad šalys susitarė dėl kainos; dėl apmokėjimo ir perdavimo jos susitaria tarpusavyje arba atsiskaito per platformą.',
+      'Mokėjimai per platformą. Jeigu pardavėjas yra nustatęs išmokas, pirkėjas gali sumokėti mokėjimo kortele ar kitu mokėjimo lange siūlomu būdu. Mokėjimus priima, lėšas laiko ir pardavėjams išmoka mokėjimo paslaugų teikėjas „Stripe“ (Stripe Payments Europe, Ltd.); mes pirkėjų ir pardavėjų lėšų nelaikome ir mokėjimo kortelių duomenų negauname. Pardavėjas, norėdamas gauti išmokas, sudaro sutartį su „Stripe“ ir pateikia jai tapatybės bei banko sąskaitos duomenis.',
+      'Pinigai pardavėjui pervedami, kai pirkėjas patvirtina, kad dalį gavo ir ji atitinka skelbimą. Pažymėjęs, kad dalį gavo, pirkėjas turi 5 dienas jai patikrinti; per šį laiką nepranešus apie problemą, pinigai pervedami pardavėjui savaime. Jeigu pirkėjas gavimo nepažymi ir apie problemą nepraneša, pinigai pervedami praėjus 14 dienų nuo tada, kai pardavėjas pažymėjo išsiuntimą ar perdavimą.',
+      'Jeigu pardavėjas dalies neišsiunčia per 7 dienas nuo apmokėjimo, pirkėjas gali užsakymą atšaukti ir atgauti visą sumą. Pardavėjas iki išsiuntimo taip pat gali užsakymą atšaukti – pinigai grąžinami pirkėjui. Pirkėjui pranešus apie problemą, pinigai sulaikomi, kol išnagrinėsime abiejų šalių paaiškinimus; sprendimą priimame pagal skelbimo turinį ir pateiktus įrodymus. Tai neriboja šalių teisės kreiptis į teismą ar vartotojų ginčus nagrinėjančią instituciją.',
+      'Už mokėjimą per platformą pirkėjui ir pardavėjui šiuo metu mokestis netaikomas. Apie mokesčio įvedimą pranešime iš anksto; jis bus rodomas prieš apmokant.',
     ],
   },
   {
@@ -130,6 +134,7 @@ export const PRIVACY: LegalSection[] = [
     title: '5. Duomenų tvarkytojai',
     paragraphs: [
       '„Supabase“ – duomenų bazė, paskyrų sistema ir nuotraukų saugykla. Duomenys laikomi Europos Sąjungoje (Frankfurtas, Vokietija).',
+      '„Stripe“ (Stripe Payments Europe, Ltd., Airija) – mokėjimų priėmimas ir išmokos pardavėjams. Perkant ar nustatant išmokas, „Stripe“ kaip savarankiškas duomenų valdytojas tvarko mokėjimo, tapatybės ir banko sąskaitos duomenis; mes gauname tik mokėjimo būseną, sumą, o pristatymui – pirkėjo nurodytą adresą ir telefoną, kuriuos matome mes ir užsakymo pardavėjas.',
       '„Vercel“ – svetainės talpinimas. Šis teikėjas gali fiksuoti techninius duomenis (IP adresą) ir tvarkyti juos už Europos ekonominės erdvės ribų, taikydamas standartines sutarčių sąlygas.',
       'Kitiems asmenims duomenis perduodame tik tada, kai to reikalauja įstatymai (pavyzdžiui, teisėsaugos institucijoms pagal teisėtą prašymą).',
     ],

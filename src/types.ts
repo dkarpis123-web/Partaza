@@ -117,3 +117,46 @@ export interface Thread {
 
 /** What the seller fills in; the id, seller and date are added when it is published. */
 export type ListingDraft = Omit<Listing, 'id' | 'sellerId' | 'createdAt' | 'status' | 'soldPrice'>;
+
+export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'received' | 'completed' | 'disputed' | 'refunded' | 'cancelled';
+
+export interface ShipTo {
+  name?: string | null;
+  phone?: string | null;
+  address?: { line1?: string | null; line2?: string | null; city?: string | null; postal_code?: string | null; state?: string | null; country?: string | null } | null;
+}
+
+/** A purchase paid through the platform. Amounts are in euros. Visible only to its buyer and seller. */
+export interface Order {
+  id: string;
+  listingId: string | null;
+  buyerId: string;
+  sellerId: string;
+  title: string;
+  itemAmount: number;
+  shippingAmount: number;
+  feeAmount: number;
+  total: number;
+  delivery: 'shipping' | 'pickup';
+  status: OrderStatus;
+  shipTo: ShipTo | null;
+  tracking: string;
+  disputeReason: string;
+  createdAt: number;
+  paidAt: number | null;
+  shippedAt: number | null;
+  receivedAt: number | null;
+  /** When the money goes to the seller by itself if the buyer does nothing. */
+  releaseAt: number | null;
+}
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: 'Laukiama apmokėjimo',
+  paid: 'Apmokėta – laukiama išsiuntimo',
+  shipped: 'Išsiųsta',
+  received: 'Gauta – tikrinama',
+  completed: 'Užbaigta',
+  disputed: 'Pranešta apie problemą',
+  refunded: 'Pinigai grąžinti pirkėjui',
+  cancelled: 'Atšaukta',
+};

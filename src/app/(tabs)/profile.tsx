@@ -9,10 +9,11 @@ import { normalizePhone } from '@/services/phone';
 import { STALE_DAYS, staleListings } from '@/services/stats';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, money } from '@/theme';
+import { ORDER_STATUS_LABELS } from '@/types';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, orders, payReady, userById } = useStore();
   const saved = listings.filter((l) => favorites.includes(l.id) && l.status !== 'sold');
   const [now] = useState(() => Date.now());
   const stale = staleListings(listings, me.id, now);
@@ -76,6 +77,33 @@ export default function ProfileScreen() {
 
       <BlockedUsers />
 
+      {live ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Mokėjimai ir išmokos</Text>
+          <Muted>{payReady.includes(me.id) ? 'Išmokos įjungtos – pirkėjai gali sumokėti už jūsų dalis per Partaza.' : 'Nustatykite išmokas, kad pirkėjai galėtų sumokėti už jūsų dalis kortele per Partaza.'}</Muted>
+          <Button label={payReady.includes(me.id) ? 'Tvarkyti išmokas' : 'Nustatyti išmokas'} kind="outline" onPress={() => router.push('/payouts')} />
+        </Card>
+      ) : null}
+
+      {orders.length > 0 ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Užsakymai ({orders.length})</Text>
+          {orders.map((o) => {
+            const bought = o.buyerId === me.id;
+            const needsMe = bought ? o.status === 'shipped' || o.status === 'received' : o.status === 'paid';
+            return (
+              <View key={o.id} style={{ gap: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <Text style={{ fontSize: 14, fontWeight: needsMe ? '700' : '400', color: colors.ink }}>
+                  {bought ? 'Pirkau' : 'Pardaviau'}: {o.title} · {money(bought ? o.total : o.itemAmount + o.shippingAmount)}
+                </Text>
+                <Muted>{ORDER_STATUS_LABELS[o.status]} · {bought ? 'pardavėjas' : 'pirkėjas'} {userById(bought ? o.sellerId : o.buyerId).name}{needsMe ? ' · laukia jūsų veiksmo' : ''}</Muted>
+                <Button label="Atidaryti užsakymą" kind={needsMe ? 'primary' : 'outline'} onPress={() => router.push(`/order/${o.id}`)} />
+              </View>
+            );
+          })}
+        </Card>
+      ) : null}
+
       <Button label="Mano prekyba: pajamos, išlaidos, pelnas" kind="dark" onPress={() => router.push('/dashboard')} />
 
       {stale.length > 0 ? (
@@ -112,7 +140,6 @@ export default function ProfileScreen() {
       )}
 
       {error ? <Notice tone="warn">{error}</Notice> : null}
-      <Notice>Balansas, užsakymai ir atsiliepimai atsiras, kai bus prijungti mokėjimai.</Notice>
 
       {confirmDelete ? (
         <Card>

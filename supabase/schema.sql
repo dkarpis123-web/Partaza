@@ -572,3 +572,138 @@ alter table public.favorites enable row level security;
 drop policy if exists favorites_own on public.favorites;
 create policy favorites_own on public.favorites for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- ---------------------------------------------------------------------------
+-- 0.7: mokėjimai per „Stripe“ – pardavėjų išmokų paskyros ir užsakymai
+-- ---------------------------------------------------------------------------
+-- Pinigus priima ir laiko „Stripe“; pardavėjui jie pervedami, kai pirkėjas patvirtina gavimą
+-- arba baigiasi patikros laikas. Šias lenteles pildo tik serverio funkcija „payments“
+-- (supabase/functions/payments); programėlė jas gali tik skaityti.
+
+-- Pardavėjo „Stripe“ paskyra. Visi mato tik tai, ar pardavėjas gali priimti mokėjimus.
+create table if not exists public.seller_accounts (
+  seller_id uuid primary key references public.profiles (id) on delete cascade,
+  stripe_account_id text not null unique,
+  payouts_ready boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+alter table public.seller_accounts enable row level security;
+revoke all on public.seller_accounts from anon, authenticated;
+grant select (seller_id, payouts_ready) on public.seller_accounts to anon, authenticated;
+drop policy if exists seller_accounts_read on public.seller_accounts;
+create policy seller_accounts_read on public.seller_accounts for select using (true);
+
+-- Užsakymas. Sumos centais. Būsenos:
+--   pending   – pirkėjas nukreiptas apmokėti (dalis rezervuota, kol galioja apmokėjimo langas)
+--   paid      – apmokėta, pinigai laikomi; pardavėjas turi išsiųsti arba perduoti
+--   shipped   – pardavėjas pažymėjo „Išsiunčiau“ / „Perdaviau“
+--   received  – pirkėjas pažymėjo „Gavau“; prasideda patikros laikas
+--   completed – pinigai pervesti pardavėjui
+--   disputed  – pirkėjas pranešė apie problemą; pinigai sulaikyti, kol išspręs administratorius
+--   refunded  – pinigai grąžinti pirkėjui
+--   cancelled – apmokėjimas neįvyko arba nutrauktas
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid references public.listings (id) on delete set null,
+  buyer_id uuid references public.profiles (id) on delete set null,
+  seller_id uuid references public.profiles (id) on delete set null,
+  title text not null,
+  item_amount integer not null check (item_amount > 0),
+  shipping_amount integer not null default 0 check (shipping_amount >= 0),
+  fee_amount integer not null default 0 check (fee_amount >= 0),
+  total_amount integer not null check (total_amount > 0),
+  currency text not null default 'eur',
+  delivery text not null check (delivery in ('shipping', 'pickup')),
+  status text not null default 'pending' check (
+    status in ('pending', 'paid', 'shipped', 'received', 'completed', 'disputed', 'refunded', 'cancelled')
+  ),
+  -- Pristatymo adresas ir telefonas iš apmokėjimo lango; mato tik pirkėjas ir pardavėjas.
+  ship_to jsonb,
+  tracking text check (tracking is null or char_length(tracking) <= 200),
+  dispute_reason text check (dispute_reason is null or char_length(dispute_reason) <= 2000),
+  stripe_session_id text,
+  stripe_payment_intent_id text,
+  stripe_charge_id text,
+  stripe_transfer_id text,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz,
+  shipped_at timestamptz,
+  received_at timestamptz,
+  -- Kada pinigai savaime atitenka pardavėjui, jei pirkėjas nieko nedaro.
+  release_at timestamptz,
+  completed_at timestamptz
+);
+
+create index if not exists orders_buyer_idx on public.orders (buyer_id, created_at desc);
+create index if not exists orders_seller_idx on public.orders (seller_id, created_at desc);
+create index if not exists orders_release_idx on public.orders (release_at) where status in ('shipped', 'received');
+create index if not exists orders_session_idx on public.orders (stripe_session_id);
+create index if not exists orders_intent_idx on public.orders (stripe_payment_intent_id);
+-- Viena dalis – vienas galiojantis užsakymas: du pirkėjai negali apmokėti tos pačios dalies.
+create unique index if not exists orders_one_per_listing on public.orders (listing_id)
+  where status not in ('cancelled', 'refunded');
+
+alter table public.orders enable row level security;
+revoke all on public.orders from anon, authenticated;
+grant select on public.orders to authenticated;
+drop policy if exists orders_read on public.orders;
+create policy orders_read on public.orders for select to authenticated
+  using ((select auth.uid()) in (buyer_id, seller_id));
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'orders'
+  ) then
+    alter publication supabase_realtime add table public.orders;
+  end if;
+end;
+$$;
+
+-- Paskyros negalima ištrinti, kol yra nebaigtų užsakymų (laikomi pinigai turi kam nors atitekti).
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'not_authenticated';
+  end if;
+  if exists (
+    select 1 from public.orders o
+    where (select auth.uid()) in (o.buyer_id, o.seller_id)
+      and o.status in ('paid', 'shipped', 'received', 'disputed')
+  ) then
+    raise exception 'open_orders';
+  end if;
+  delete from auth.users where id = (select auth.uid());
+end;
+$$;
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
+
+-- Automatinis pinigų atleidimas: kas 15 minučių serverio funkcija patikrina, kurių užsakymų
+-- patikros laikas baigėsi. Kvietimas be duomenų – funkcija pati nusprendžia, ką atleisti.
+-- Projekto adresas imamas iš nustatymo; jei jo nėra (vietiniai bandymai), darbas nekuriamas.
+do $$
+declare
+  v_url text := current_setting('app.settings.functions_url', true);
+begin
+  if v_url is null or v_url = '' then
+    v_url := 'https://vpywtkqgbglqxufhzuct.supabase.co/functions/v1';
+  end if;
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron')
+     and exists (select 1 from pg_available_extensions where name = 'pg_net') then
+    execute 'create extension if not exists pg_cron';
+    execute 'create extension if not exists pg_net';
+    perform cron.schedule(
+      'partaza-release-orders',
+      '*/15 * * * *',
+      format($job$select net.http_post(url := %L, body := '{"action":"release_due"}'::jsonb, headers := '{"Content-Type":"application/json"}'::jsonb)$job$, v_url || '/payments')
+    );
+  end if;
+end;
+$$;

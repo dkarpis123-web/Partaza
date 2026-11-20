@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
-import type { Donor, Listing, ListingDraft, Message, MyCar, SellerKind, Thread, User } from '@/types';
+import type { Donor, Listing, ListingDraft, Message, MyCar, Order, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -27,6 +27,19 @@ interface State {
   blocked: string[];
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
   phone: string;
+  /** The signed-in person's purchases and sales paid through the platform. */
+  orders: Order[];
+  /** Ids of sellers who can take payments through the platform. */
+  payReady: string[];
+}
+
+export type OrderStep = 'ship' | 'received' | 'confirm' | 'dispute' | 'cancel';
+export interface PayoutStatus {
+  /** false = payments are not switched on for the whole platform yet. */
+  configured: boolean;
+  exists: boolean;
+  ready: boolean;
+  error?: string;
 }
 
 type Result = Promise<string | null>;
@@ -66,6 +79,15 @@ interface Store extends State {
   sendOffer: (threadId: string, amount: number, text: string) => Result;
   answerOffer: (threadId: string, messageId: string, status: 'accepted' | 'declined') => Result;
   report: (listingId: string) => Result;
+  /** Starts a payment; resolves to the address of the payment page. */
+  buy: (listingId: string, delivery: 'shipping' | 'pickup') => Promise<{ url?: string; error?: string }>;
+  /** Asks the server to check with the payment provider whether an order has been paid. */
+  syncOrder: (orderId: string) => Result;
+  orderStep: (orderId: string, step: OrderStep, text?: string) => Result;
+  payoutStatus: () => Promise<PayoutStatus>;
+  /** Resolves to the address where the seller sets up (or manages) payouts. */
+  startPayouts: () => Promise<{ url?: string; error?: string }>;
+  orderById: (id: string) => Order | undefined;
   deleteAccount: () => Result;
   refresh: () => Promise<void>;
   userById: (id: string) => User;
@@ -80,8 +102,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], payReady: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], payReady: [] };
 }
 
 let counter = 0;
@@ -106,6 +128,7 @@ const ERRORS: Record<string, string> = {
   'User already registered': ALREADY_REGISTERED,
   'Email not confirmed': 'El. paštas dar nepatvirtintas. Atidarykite laišką ir paspauskite nuorodą.',
   'should be different': 'Naujas slaptažodis turi skirtis nuo senojo.',
+  open_orders: 'Paskyros ištrinti negalima, kol turite nebaigtų užsakymų. Palaukite, kol jie bus užbaigti.',
   'rate limit': 'Per daug bandymų per trumpą laiką. Palaukite kelias minutes ir bandykite dar kartą.',
 };
 
@@ -149,6 +172,50 @@ function toMessage(row: Row): Message {
 function toThread(row: Row): Thread {
   const messages: Message[] = (row.messages ?? []).map(toMessage).sort((a: Message, b: Message) => a.at - b.at);
   return { id: row.id, listingId: row.listing_id, buyerId: row.buyer_id, sellerId: row.seller_id, messages };
+}
+
+function toOrder(row: Row): Order {
+  const time = (value: string | null) => (value ? new Date(value).getTime() : null);
+  return {
+    id: row.id, listingId: row.listing_id ?? null, buyerId: row.buyer_id ?? '', sellerId: row.seller_id ?? '', title: row.title,
+    itemAmount: row.item_amount / 100, shippingAmount: row.shipping_amount / 100, feeAmount: row.fee_amount / 100, total: row.total_amount / 100,
+    delivery: row.delivery === 'pickup' ? 'pickup' : 'shipping', status: row.status, shipTo: row.ship_to ?? null,
+    tracking: row.tracking ?? '', disputeReason: row.dispute_reason ?? '', createdAt: new Date(row.created_at).getTime(),
+    paidAt: time(row.paid_at), shippedAt: time(row.shipped_at), receivedAt: time(row.received_at), releaseAt: time(row.release_at),
+  };
+}
+
+const PAY_ERRORS: Record<string, string> = {
+  not_authenticated: 'Pirmiausia prisijunkite.',
+  not_configured: 'Mokėjimai per Partaza dar neįjungti.',
+  connect_not_enabled: 'Išmokos pardavėjams dar neįjungtos. Bandykite vėliau.',
+  listing_not_active: 'Skelbimas nebeaktyvus – gali būti, kad dalis ką tik parduota.',
+  listing_reserved: 'Šią dalį šiuo metu apmoka kitas pirkėjas. Pabandykite po pusvalandžio.',
+  own_listing: 'Savo skelbimo pirkti negalima.',
+  no_shipping: 'Pardavėjas šios dalies nesiunčia – galimas tik atsiėmimas.',
+  no_pickup: 'Šios dalies atsiimti negalima – tik pristatymas.',
+  user_blocked: 'Pirkti negalite: vienas iš jūsų užblokavo kitą.',
+  seller_not_ready: 'Pardavėjas dar nepriima mokėjimų per Partaza. Susitarkite žinutėmis.',
+  amount_too_small: 'Suma per maža mokėjimui kortele.',
+  wrong_status: 'Užsakymo būsena pasikeitė. Atnaujinkite puslapį.',
+  not_allowed: 'Šis veiksmas jums neleidžiamas.',
+  not_a_participant: 'Šio užsakymo neberandame.',
+  reason_required: 'Aprašykite problemą bent keliais žodžiais.',
+  too_early: 'Atšaukti galima, jei pardavėjas neišsiunčia per 7 dienas nuo apmokėjimo.',
+  stripe_error: 'Mokėjimų sistema atsakė klaida. Bandykite dar kartą po minutės.',
+};
+
+/** Calls the server's payment function. Resolves to its answer, or to a message for the user. */
+async function pay(body: Row): Promise<{ data?: Row; error?: string }> {
+  if (!supabase) return { error: 'Bandomuoju režimu mokėjimų nėra.' };
+  try {
+    const { data, error } = await supabase.functions.invoke('payments', { body });
+    if (error || !data) return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+    if (data.error) return { error: PAY_ERRORS[data.error] ?? PAY_ERRORS.stripe_error, data };
+    return { data };
+  } catch {
+    return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+  }
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -231,6 +298,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
     }
     const threads = ((threadsRes as { data: Row[] | null }).data ?? []).map(toThread);
+    // Payments: who can be paid through the platform (public), and my own orders.
+    const [readyRes, ordersRes] = await Promise.all([
+      supabase.from('seller_accounts').select('seller_id').eq('payouts_ready', true),
+      uid ? supabase.from('orders').select('*').neq('status', 'cancelled').order('created_at', { ascending: false }) : Promise.resolve({ data: [] as Row[] }),
+    ]);
+    const payReady = (readyRes.data ?? []).map((r: Row) => r.seller_id as string);
+    const orders = ((ordersRes as { data: Row[] | null }).data ?? []).map(toOrder);
 
     const ids = new Set<string>();
     listings.forEach((l) => ids.add(l.sellerId));
@@ -239,12 +313,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ids.add(t.buyerId);
       ids.add(t.sellerId);
     });
+    orders.forEach((o) => {
+      if (o.buyerId) ids.add(o.buyerId);
+      if (o.sellerId) ids.add(o.sellerId);
+    });
     if (uid) ids.add(uid);
     const profilesRes = ids.size > 0 ? await supabase.from('profiles').select('*').in('id', [...ids]) : { data: [] as Row[] };
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, orders, payReady });
   }, []);
 
   useEffect(() => {
@@ -265,6 +343,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const channel = client
       .channel('messages')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        refresh();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         refresh();
       })
       .subscribe();
@@ -631,6 +712,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return error ? explain(error) : null;
     };
 
+    const buy: Store['buy'] = async (listingId, delivery) => {
+      const answer = await pay({ action: 'checkout', listing_id: listingId, delivery });
+      if (answer.error) return { error: answer.error };
+      return answer.data?.url ? { url: String(answer.data.url) } : { error: PAY_ERRORS.stripe_error };
+    };
+
+    const syncOrder: Store['syncOrder'] = async (orderId) => {
+      const answer = await pay({ action: 'sync_order', order_id: orderId });
+      await refresh();
+      return answer.error ?? null;
+    };
+
+    const orderStep: Store['orderStep'] = async (orderId, step, text) => {
+      const answer = await pay({ action: 'order_action', order_id: orderId, do: step, tracking: text, reason: text });
+      await refresh();
+      return answer.error ?? null;
+    };
+
+    const payoutStatus: Store['payoutStatus'] = async () => {
+      const answer = await pay({ action: 'connect_status' });
+      if (answer.data?.configured === false) return { configured: false, exists: false, ready: false };
+      if (answer.error) return { configured: true, exists: false, ready: false, error: answer.error };
+      await refresh();
+      return { configured: true, exists: !!answer.data?.exists, ready: !!answer.data?.ready };
+    };
+
+    const startPayouts: Store['startPayouts'] = async () => {
+      const answer = await pay({ action: 'connect_start' });
+      if (answer.error) return { error: answer.error };
+      return answer.data?.url ? { url: String(answer.data.url) } : { error: PAY_ERRORS.stripe_error };
+    };
+
     const deleteAccount: Store['deleteAccount'] = async () => {
       if (!supabase) {
         setState(initialState());
@@ -649,7 +762,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(
@@ -680,6 +793,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       userById: (id) => (id === state.me.id ? state.me : state.users.find((u) => u.id === id) ?? UNKNOWN),
       listingById: (id) => state.listings.find((l) => l.id === id),
       threadById: (id) => state.threads.find((t) => t.id === id),
+      orderById: (id) => state.orders.find((o) => o.id === id),
       threadForListing: (listingId) => state.threads.find((t) => t.listingId === listingId && t.buyerId === state.me.id),
     }),
     [state, actions, refresh, myCar, setMyCar, unreadThreadIds, markRead],

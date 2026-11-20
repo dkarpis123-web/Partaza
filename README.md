@@ -31,7 +31,8 @@ Tai svarbu žinoti prieš rodant programėlę kitiems:
 | Dalies atpažinimas iš nuotraukų | Neprijungtas: laukai užpildomi pavyzdžiu, ekrane apie tai parašyta | AI etape (`src/services/ai.ts`) |
 | Pardavėjo atsakymas į pasiūlymą | Automatinis demonstracinis kontrpasiūlymas | Įrašius `.env` reikšmes – atsako tikras pardavėjas |
 | Kainos patarimas | Tik iš mūsų rinkos skelbimų su tuo pačiu kodu | Internetinė paieška – 4 etape |
-| Mokėjimai, pirkėjo apsauga, siuntimas | Nėra; susitarus rodoma, kad tai bus vėliau | 3 etape |
+| Mokėjimai ir pirkėjo apsauga | Nėra | Įjungus „Stripe“ (žr. „Mokėjimai“ žemiau) |
+| Siuntų užsakymas | Nėra; pardavėjas siunčia pats | Vėlesniame etape |
 | Prisijungimas | Tik vardas ir statusas šiame įrenginyje | Įrašius `.env` reikšmes – el. paštas ir slaptažodis |
 | Pranešimai moderatoriams | Mygtukas yra, niekur nesiunčiama | Įrašius `.env` reikšmes – kaupiama lentelėje `reports` |
 
@@ -121,3 +122,36 @@ src/theme.ts        spalvos, pinigų formatas, pirkėjo apsaugos mokesčio formu
 3. AI: dalies ir kodo atpažinimas iš nuotraukų, pažeidimų pasiūlymai.
 4. Mokėjimai su lėšų sulaikymu, siuntimas, atsiliepimai.
 5. Teikimas į „App Store“ ir „Google Play“.
+
+## Mokėjimai („Stripe Connect“)
+
+Pirkėjas sumoka „Stripe“ mokėjimo puslapyje, pinigai laikomi platformos „Stripe“ balanse ir pervedami į pardavėjo
+„Stripe“ paskyrą, kai pirkėjas patvirtina gavimą. MB „Sintela“ pati svetimų pinigų nelaiko ir kortelių duomenų nemato.
+
+Taisyklės (keičiamos `supabase/functions/payments/index.ts` viršuje):
+
+- gavęs dalį pirkėjas turi **5 dienas** patikrai; nepranešus apie problemą pinigai pervedami savaime;
+- jei pirkėjas nepažymi „Gavau“, pinigai pervedami po **14 dienų** nuo „Išsiunčiau“;
+- jei pardavėjas neišsiunčia per **7 dienas**, pirkėjas gali atšaukti ir atgauti pinigus;
+- pranešus apie problemą pinigai sulaikomi; sprendžia administratorius: grąžinti pirkėjui – „Stripe“ skydelyje
+  padaryti visą grąžinimą (*Refund*), užsakymas pasižymės pats; atiduoti pardavėjui – lentelėje `orders` nustatyti
+  `status = 'received'` ir `release_at = now()`.
+
+Mygtuką „Pirkti“ pirkėjai mato tik tų pardavėjų skelbimuose, kurie skiltyje „Profilis → Mokėjimai ir išmokos“ yra
+nustatę išmokas (tapatybę ir IBAN įveda „Stripe“ puslapyje).
+
+### Kaip įjungti
+
+1. „Stripe“ skydelyje įjunkite **Connect** (platformos profilis: prekyvietė, pardavėjai su „Express“ skydeliu).
+2. „Supabase“ → **Edge Functions → Secrets** įrašykite `STRIPE_SECRET_KEY` (bandymams – `sk_test_…`).
+   Šio rakto nedėkite nei į `.env`, nei į kodą, nei į susirašinėjimą.
+3. „Stripe“ → **Developers → Webhooks** sukurkite adresą `https://<projektas>.supabase.co/functions/v1/payments`
+   su įvykiais `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, o prijungtų paskyrų
+   (*Connected accounts*) įvykiams – `account.updated`. Jo pasirašymo raktą (`whsec_…`) įrašykite kaip
+   `STRIPE_WEBHOOK_SECRET`.
+4. Funkcija `payments` diegiama su išjungta JWT patikra (ją kviečia ir „Stripe“); naudotojo teises ji tikrina pati.
+
+Mokestis pirkėjui šiuo metu 0. Įjungiamas paslaptimis `PARTAZA_FEE_PERCENT` (pvz., `5`) ir
+`PARTAZA_FEE_FIXED_CENTS` (pvz., `70`); tada ekrane `src/app/buy/[id].tsx` reikia parodyti tą pačią sumą.
+Kol mokestis 0, „Stripe“ komisinį už kiekvieną mokėjimą sumoka platforma.

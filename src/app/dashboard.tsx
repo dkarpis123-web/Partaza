@@ -69,7 +69,7 @@ export default function DashboardScreen() {
       ))}
 
       <Notice>
-        Automobilio pirkimo kaina į išlaidas įskaičiuojama iš karto, pavienės dalies – kai ji parduodama. Platformos mokesčiai, siuntimas ir mokesčiai valstybei neįskaičiuoti. Kol mokėjimai neprijungti, pardavimus pažymite patys.
+        Automobilio pirkimo kaina į išlaidas įskaičiuojama iš karto, pavienės dalies – kai ji parduodama. Platformos mokesčiai, siuntimas ir mokesčiai valstybei neįskaičiuoti. Per Partaza apmokėti pardavimai įrašomi savaime, kitus pažymite patys.
       </Notice>
     </Page>
   );

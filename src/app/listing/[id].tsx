@@ -12,7 +12,7 @@ import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, payReady } = useStore();
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
   const [shown, setShown] = useState(0);
@@ -43,6 +43,8 @@ export default function ListingScreen() {
   const seller = userById(listing.sellerId);
   const mine = listing.sellerId === me.id;
   const hasDefects = listing.defects.length > 0;
+  // Paying through the platform is offered only when the seller has set up payouts.
+  const canBuy = live && listing.status !== 'sold' && payReady.includes(listing.sellerId);
 
   const openChat = async () => {
     if (live && !registered) return router.push('/register');
@@ -64,11 +66,16 @@ export default function ListingScreen() {
         mine ? (
           <Muted>{listing.status === 'sold' ? 'Tai jūsų parduota dalis.' : 'Tai jūsų skelbimas. Pirkėjai jį mato paieškoje.'}</Muted>
         ) : (
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            {listing.allowOffers ? (
-              <Button label="Siūlyti kainą" kind="outline" onPress={() => router.push(`/offer/${listing.id}`)} style={{ flex: 1 }} />
+          <View style={{ gap: 10 }}>
+            {canBuy ? (
+              <Button label={`Pirkti · ${money(listing.price)}`} onPress={() => router.push(registered ? `/buy/${listing.id}` : '/register')} />
             ) : null}
-            <Button label="Rašyti pardavėjui" onPress={openChat} style={{ flex: 1 }} />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {listing.allowOffers ? (
+                <Button label="Siūlyti kainą" kind="outline" onPress={() => router.push(`/offer/${listing.id}`)} style={{ flex: 1 }} />
+              ) : null}
+              <Button label="Rašyti pardavėjui" kind={canBuy ? 'outline' : 'primary'} onPress={openChat} style={{ flex: 1 }} />
+            </View>
           </View>
         )
       }>
@@ -161,6 +168,16 @@ export default function ListingScreen() {
         {seller.since ? <Muted>Prekiauja nuo {seller.since}</Muted> : null}
       </Card>
 
+      {mine || !canBuy ? null : (
+        <Notice>Perkant per Partaza pinigai pardavėjui pervedami tik tada, kai patvirtinate, kad dalį gavote ir ji tvarkinga.</Notice>
+      )}
+      {mine && live && listing.status !== 'sold' && !payReady.includes(me.id) ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Priimkite mokėjimus per Partaza</Text>
+          <Muted>Nustačius išmokas, pirkėjai šiame skelbime matys mygtuką „Pirkti“ ir galės sumokėti kortele.</Muted>
+          <Button label="Nustatyti išmokas" kind="outline" onPress={() => router.push('/payouts')} />
+        </Card>
+      ) : null}
       {mine && listing.status === 'sold' ? (
         <Notice>Pažymėta kaip parduota{listing.soldPrice != null ? ` už ${money(listing.soldPrice)}` : ''}. Pirkėjai šio skelbimo nebemato.</Notice>
       ) : null}
@@ -182,7 +199,7 @@ export default function ListingScreen() {
                 }}
               />
             </View>
-            <Muted>Kol mokėjimai per programėlę neprijungti, pardavimą pažymite patys. Vėliau tai vyks automatiškai.</Muted>
+            <Muted>Taip pažymėkite pardavimus, už kuriuos atsiskaityta ne per Partaza. Per Partaza apmokėtos dalys pažymimos savaime.</Muted>
           </Card>
         ) : (
           <Button
