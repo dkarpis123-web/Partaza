@@ -547,3 +547,28 @@ create table if not exists public.notification_log (
 );
 alter table public.notification_log enable row level security;
 revoke all on public.notification_log from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 0.6: skelbimo aprašymas ir įsiminti skelbimai
+-- ---------------------------------------------------------------------------
+
+alter table public.listings add column if not exists description text not null default '';
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'listings_description_length') then
+    alter table public.listings add constraint listings_description_length check (char_length(description) <= 3000);
+  end if;
+end;
+$$;
+
+create table if not exists public.favorites (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  listing_id uuid not null references public.listings (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, listing_id)
+);
+grant select, insert, delete on public.favorites to authenticated;
+alter table public.favorites enable row level security;
+drop policy if exists favorites_own on public.favorites;
+create policy favorites_own on public.favorites for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

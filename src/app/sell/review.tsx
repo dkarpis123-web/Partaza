@@ -78,6 +78,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [city, setCity] = useState(editing?.city ?? '');
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
+  const [description, setDescription] = useState(editing?.description ?? '');
   const [costText, setCostText] = useState(editing?.cost != null ? toText(editing.cost) : '');
   const [error, setError] = useState('');
   const [publishing, setPublishing] = useState(false);
@@ -120,7 +121,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country: editing?.country ?? 'Lietuva', shipping, pickup: true, photos, allowOffers,
-      classic, wholeVehicle: whole, donorId: donor ? donor.id : null, cost: donor ? null : cost,
+      classic, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
       const problem = await updateListing(editing.id, draft);
@@ -128,7 +129,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       if (problem) return setError(problem);
       return router.back();
     }
-    const result = await addListing(whole ? draft : {
+    const result = await addListing(whole ? draft : { description: description.trim(),
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country: 'Lietuva', shipping, pickup: true, photos, allowOffers,
       classic, donorId: donor ? donor.id : null, cost: donor ? null : cost,
@@ -164,6 +165,16 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Field label="Pavadinimas" value={title} onChangeText={setTitle} />
         <Field label="Dalies (OEM) numeris" value={oem} onChangeText={setOem} hint="Pagal numerį pirkėjai ras dalį ir matysime panašių dalių kainas." />
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />
+        <Field
+          label="Aprašymas (nebūtina)"
+          value={description}
+          onChangeText={(t) => setDescription(t.slice(0, 3000))}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          style={{ minHeight: 110 }}
+          placeholder={whole ? 'Kas veikia, kas pažeista, ko trūksta, rida, variklis…' : 'Rida, iš kokio automobilio išimta, kas dar svarbu pirkėjui…'}
+        />
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Transportas</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {TYPES.map((t) => (

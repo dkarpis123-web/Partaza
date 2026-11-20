@@ -75,7 +75,7 @@ export default function SearchScreen() {
     const q = normalize(query);
     const c = normalize(city);
     const filtered = listings.filter((l) => {
-      if (q && !normalize(`${l.title} ${l.oem} ${l.fits}`).includes(q)) return false;
+      if (q && !normalize(`${l.title} ${l.oem} ${l.fits} ${l.description ?? ''}`).includes(q)) return false;
       if (type && l.vehicleType !== type) return false;
       if (country && l.country !== country) return false;
       if (c && !normalize(l.city).includes(c)) return false;

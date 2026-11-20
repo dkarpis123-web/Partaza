@@ -12,7 +12,8 @@ import { MAX_WIDTH, colors, money } from '@/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites } = useStore();
+  const saved = listings.filter((l) => favorites.includes(l.id) && l.status !== 'sold');
   const [now] = useState(() => Date.now());
   const stale = staleListings(listings, me.id, now);
   const [phoneText, setPhoneText] = useState<string | null>(null);
@@ -91,6 +92,13 @@ export default function ProfileScreen() {
             </View>
           ))}
         </Card>
+      ) : null}
+
+      {saved.length > 0 ? (
+        <>
+          <Heading>Įsiminti skelbimai ({saved.length})</Heading>
+          <ListingGrid listings={saved} width={Math.min(width, MAX_WIDTH)} />
+        </>
       ) : null}
 
       <Heading>Mano skelbimai ({mine.length})</Heading>

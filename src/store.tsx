@@ -21,6 +21,8 @@ interface State {
   threads: Thread[];
   /** The signed-in seller's own dismantled vehicles. */
   donors: Donor[];
+  /** Ids of listings the signed-in person has saved. */
+  favorites: string[];
   /** Ids of people the signed-in person has blocked. Their listings and chats are hidden. */
   blocked: string[];
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
@@ -40,6 +42,8 @@ interface Store extends State {
   registerDemo: (name: string, kind: SellerKind, phone: string) => void;
   signUp: (email: string, password: string, name: string, kind: SellerKind, phone: string) => Result;
   setPhone: (phone: string) => Result;
+  /** Saves or un-saves a listing. */
+  toggleFavorite: (listingId: string) => Result;
   blockUser: (userId: string) => Result;
   unblockUser: (userId: string) => Result;
   /** Sends a link for choosing a new password. */
@@ -76,8 +80,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [] };
 }
 
 let counter = 0;
@@ -126,7 +130,7 @@ function toListing(row: Row): Listing {
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: row.country, shipping: row.shipping === null ? null : Number(row.shipping),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
-    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : 'active',
+    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : 'active',
   };
 }
 
@@ -206,7 +210,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Private seller data (purchase costs, donors, sale prices): the server returns only the user's own rows.
     let donors: Donor[] = [];
     let blocked: string[] = [];
+    let favorites: string[] = [];
     if (uid) {
+      const favoritesRes = await supabase.from('favorites').select('listing_id');
+      favorites = (favoritesRes.data ?? []).map((f: Row) => f.listing_id);
       const blocksRes = await supabase.from('blocks').select('blocked_id');
       blocked = (blocksRes.data ?? []).map((b: Row) => b.blocked_id);
       const [donorsRes, financeRes] = await Promise.all([
@@ -237,7 +244,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites });
   }, []);
 
   useEffect(() => {
@@ -303,6 +310,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (error) return { kind: 'error', message: explain(error) };
       await refresh();
       return { kind: params.get('type') === 'recovery' ? 'recovery' : 'signedIn' };
+    };
+
+    const toggleFavorite: Store['toggleFavorite'] = async (listingId) => {
+      const { me, favorites } = stateRef.current;
+      const saved = favorites.includes(listingId);
+      if (supabase) {
+        const { error } = saved
+          ? await supabase.from('favorites').delete().eq('user_id', me.id).eq('listing_id', listingId)
+          : await supabase.from('favorites').upsert({ user_id: me.id, listing_id: listingId }, { onConflict: 'user_id,listing_id', ignoreDuplicates: true });
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, favorites: saved ? s.favorites.filter((id) => id !== listingId) : [...s.favorites, listingId] }));
+      return null;
     };
 
     const blockUser: Store['blockUser'] = async (userId) => {
@@ -433,7 +453,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
           defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
-          classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle,
+          classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
         })
         .select()
         .single();
@@ -464,6 +484,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
             pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle,
+            description: draft.description ?? '',
           })
           .eq('id', listingId);
         if (error) return explain(error);
@@ -628,7 +649,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

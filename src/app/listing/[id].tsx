@@ -12,7 +12,7 @@ import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite } = useStore();
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
   const [shown, setShown] = useState(0);
@@ -120,6 +120,16 @@ export default function ListingScreen() {
       ) : null}
 
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
+      {mine ? null : (
+        <Button
+          label={favorites.includes(listing.id) ? 'Įsiminta – pašalinti' : 'Įsiminti skelbimą'}
+          kind={favorites.includes(listing.id) ? 'dark' : 'outline'}
+          onPress={async () => {
+            if (live && !registered) return router.push('/register');
+            setError((await toggleFavorite(listing.id)) ?? '');
+          }}
+        />
+      )}
       <Text style={{ fontSize: 30, fontWeight: '700', color: colors.ink }}>
         {money(listing.price)}{' '}
         <Text style={{ fontSize: 14, fontWeight: '600', color: colors.muted }}>{listing.vat ? 'su PVM' : 'be PVM'}</Text>
@@ -132,6 +142,7 @@ export default function ListingScreen() {
       )}
 
       <Card style={{ gap: 0 }}>
+        {listing.description ? <Text style={{ fontSize: 15, lineHeight: 23, color: colors.ink, marginBottom: 8 }}>{listing.description}</Text> : null}
         <Row label="Būklė" value={CONDITION_LABELS[listing.condition]} />
         <Row label="Transportas" value={`${VEHICLE_LABELS[listing.vehicleType]}${listing.classic ? ' · istorinis' : ''}`} />
         {listing.wholeVehicle ? <Row label="Parduodama" value="Visas automobilis dalims" /> : null}

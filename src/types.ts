@@ -59,6 +59,8 @@ export interface Listing {
   photos: string[];
   allowOffers: boolean;
   createdAt: number;
+  /** Free-text description by the seller. */
+  description?: string;
   /** Part for a historic / classic vehicle. */
   classic?: boolean;
   /** When the seller last lowered the price; the 90-day reminder counts from here (or from createdAt). */
