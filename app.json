@@ -34,7 +34,8 @@
           "photosPermission": "Partaza naudoja nuotraukas dalies skelbimui.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "partaza"
   }
