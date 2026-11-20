@@ -4,7 +4,7 @@ import { ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-na
 
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
-import { fitsCar, readVin } from '@/services/vin';
+import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -53,7 +53,9 @@ export default function SearchScreen() {
     const make = makeText.trim() || vinInfo?.make || '';
     if (vinText.trim() && !vinInfo) return setCarError('VIN turi būti 17 ženklų, be raidžių I, O ir Q.');
     if (!make) return setCarError('Įrašykite markę, pvz., Volkswagen.');
-    setMyCar({ make, model: modelText.trim(), vin: vinInfo?.vin ?? '', year: vinInfo?.year ?? null });
+    // A model read from the VIN (e.g. "Passat B6 / B7") is narrowed to its name so it matches sellers' wording.
+    const guessed = modelSearchTerm(vinInfo);
+    setMyCar({ make, model: modelText.trim() || guessed, vin: vinInfo?.vin ?? '', year: vinInfo?.year ?? null });
     setOnlyMyCar(true);
     setEditCar(false);
     setCarError('');
@@ -124,14 +126,14 @@ export default function SearchScreen() {
       {!myCar && !editCar ? <Button label="Rodyti tik mano automobiliui tinkančias dalis" kind="outline" onPress={() => setEditCar(true)} /> : null}
       {editCar ? (
         <Card>
-          <Field label="VIN (nebūtina)" value={vinText} onChangeText={(t) => { setVinText(t); setCarError(''); }} autoCapitalize="characters" hint="Iš VIN atpažįstame markę ir metus. Modelį įrašykite patys." />
+          <Field label="VIN (nebūtina)" value={vinText} onChangeText={(t) => { setVinText(t); setCarError(''); }} autoCapitalize="characters" hint="Iš VIN atpažįstame markę ir metus, kai kurioms markėms – ir modelį. Patikrinkite ir pataisykite." />
           {vinInfo ? (
             <Muted>
-              {vinInfo.make ? `Markė: ${vinInfo.make}` : 'Markės pagal šį VIN neatpažinome'}{vinInfo.year ? ` · apie ${vinInfo.year} m.` : ''}
+              {vinInfo.make ? `Markė: ${vinInfo.make}` : 'Markės pagal šį VIN neatpažinome'}{vinInfo.model ? ` · modelis: ${vinInfo.model}` : ''}{vinInfo.year ? ` · apie ${vinInfo.year} m.` : ''}
             </Muted>
           ) : null}
           <Field label="Markė" value={makeText || vinInfo?.make || ''} onChangeText={(t) => { setMakeText(t); setCarError(''); }} placeholder="Pvz., Volkswagen" />
-          <Field label="Modelis" value={modelText} onChangeText={setModelText} placeholder="Pvz., Transporter" />
+          <Field label="Modelis" value={modelText} onChangeText={setModelText} placeholder={modelSearchTerm(vinInfo) || 'Pvz., Transporter'} />
           {carError ? <Notice tone="warn">{carError}</Notice> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button label="Išsaugoti" onPress={saveCar} style={{ flex: 1 }} />

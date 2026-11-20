@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Alert, Image, Platform, Pressable, Text, View } from 'react-native';
 
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
+import { readVin } from '@/services/vin';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
 
@@ -30,6 +31,9 @@ export default function SellScreen() {
   const [donorVin, setDonorVin] = useState('');
   const [donorCost, setDonorCost] = useState('');
   const [error, setError] = useState('');
+
+  const donorVinInfo = readVin(donorVin);
+  const donorSuggestion = donorVinInfo?.make ? [donorVinInfo.make, donorVinInfo.model, donorVinInfo.year].filter(Boolean).join(' ') : '';
 
   const saveDonor = async () => {
     const cost = Number(donorCost.replace(',', '.').trim() || '0');
@@ -97,6 +101,9 @@ export default function SellScreen() {
             <>
               <Field label="Automobilis" value={donorName} onChangeText={setDonorName} placeholder="Pvz., VW Passat B6 2008" />
               <Field label="VIN (nebūtina)" value={donorVin} onChangeText={setDonorVin} autoCapitalize="characters" />
+              {donorSuggestion && donorSuggestion !== donorName ? (
+                <Button label={`Pagal VIN: ${donorSuggestion}`} kind="quiet" onPress={() => setDonorName(donorSuggestion)} />
+              ) : null}
               <Field label="Už kiek pirkote, €" value={donorCost} onChangeText={setDonorCost} keyboardType="decimal-pad" placeholder="0" />
               <Button label="Išsaugoti automobilį" kind="outline" onPress={saveDonor} />
             </>
