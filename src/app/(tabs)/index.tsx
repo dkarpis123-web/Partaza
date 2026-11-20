@@ -52,8 +52,8 @@ export default function HomeScreen() {
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Chip icon="view-grid-outline" label="Visi" selected={type === null && special === null} onPress={() => { setType(null); setSpecial(null); }} />
-        <Chip label="Senoviniai automobiliai" selected={special === 'classic'} onPress={() => setSpecial((v) => (v === 'classic' ? null : 'classic'))} />
-        <Chip label="Automotosportas" selected={special === 'motorsport'} onPress={() => setSpecial((v) => (v === 'motorsport' ? null : 'motorsport'))} />
+        <Chip icon="car-convertible" label="Senoviniai automobiliai" selected={special === 'classic'} onPress={() => setSpecial((v) => (v === 'classic' ? null : 'classic'))} />
+        <Chip icon="flag-checkered" label="Automotosportas" selected={special === 'motorsport'} onPress={() => setSpecial((v) => (v === 'motorsport' ? null : 'motorsport'))} />
         {TYPES.map((t) => (
           <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
         ))}

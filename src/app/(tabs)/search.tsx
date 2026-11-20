@@ -7,7 +7,7 @@ import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui'
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
 import { detectCountry } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
-import { newMatches, normalize } from '@/services/match';
+import { flagOf, newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -81,6 +81,7 @@ export default function SearchScreen() {
   // Once the listings are known, start in the visitor's own country if there is anything to show there.
   const [home] = useState(detectCountry);
   const [suggested, setSuggested] = useState(false);
+  const [editPlace, setEditPlace] = useState(false);
   if (!suggested && countries.length > 0) {
     setSuggested(true);
     if (home && countries.includes(home) && country === null) setCountry(home);
@@ -190,29 +191,40 @@ export default function SearchScreen() {
         </Card>
       ) : null}
       <Card>
-        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>Ieškoti tik šioje vietoje</Text>
-        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Šalis</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Chip label="Visos" selected={country === null} onPress={() => setCountry(null)} />
-          {countries.map((c) => (
-            <Chip key={c} label={c} selected={country === c} onPress={() => setCountry(c)} />
-          ))}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, color: colors.muted }}>Ieškoma čia</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>
+              {`${country ? `${flagOf(country)} ${tr(country)}` : tr('Visos šalys')}${city.trim() ? ` · ${city.trim()}` : ''}`}
+            </Text>
+          </View>
+          <Button label={editPlace ? 'Gerai' : 'Keisti'} kind="outline" onPress={() => setEditPlace((v) => !v)} />
         </View>
-        {home && country === home ? <Muted>Pagal jūsų vietą parinkta šalis. Kitų šalių skelbimus matysite pasirinkę „Visos“.</Muted> : null}
-        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Miestas</Text>
-        <TextInput
-          accessibilityLabel="Miestas"
-          placeholder="Pvz., Kaunas"
-          placeholderTextColor={colors.muted}
-          value={city}
-          onChangeText={setCity}
-          style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
-        />
+        {editPlace ? (
+          <>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <Chip label="Visos šalys" selected={country === null} onPress={() => setCountry(null)} />
+              {countries.map((c) => (
+                <Chip key={c} label={`${flagOf(c)} ${tr(c)}`} selected={country === c} onPress={() => setCountry(c)} />
+              ))}
+            </View>
+            <TextInput
+              accessibilityLabel="Miestas"
+              placeholder="Miestas, pvz., Kaunas"
+              placeholderTextColor={colors.muted}
+              value={city}
+              onChangeText={setCity}
+              style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
+            />
+          </>
+        ) : home && country === home ? (
+          <Muted>Šalis parinkta pagal jūsų vietą.</Muted>
+        ) : null}
       </Card>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Chip label={showFilters ? 'Slėpti filtrus' : 'Gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
-        <Chip label="Senoviniai automobiliai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
-        <Chip label="Automotosportas" selected={onlyMotorsport} onPress={() => setOnlyMotorsport((v) => !v)} />
+        <Chip icon="car-convertible" label="Senoviniai automobiliai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
+        <Chip icon="flag-checkered" label="Automotosportas" selected={onlyMotorsport} onPress={() => setOnlyMotorsport((v) => !v)} />
         <Chip label="Visas automobilis" selected={onlyWhole} onPress={() => setOnlyWhole((v) => !v)} />
         <Chip icon="view-grid-outline" label="Visi" selected={type === null} onPress={() => setType(null)} />
         {TYPES.map((t) => (

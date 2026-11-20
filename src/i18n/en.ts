@@ -372,6 +372,12 @@ export const EN: Record<string, string> = {
   'Naršyklėje atidarykite partaza.eu ir pasirinkite „Pridėti prie pradžios ekrano“. Svetainė atsidarys kaip programėlė, be naršyklės juostos.': 'Open partaza.eu in your browser and choose “Add to Home Screen”. The site then opens like an app, without the browser bar.',
   'Jūs jau naudojate programėlę. Naujausią bandomąją versiją rasite svetainėje partaza.eu/app.': 'You are already using the app. The latest test version is at partaza.eu/app.',
 
+  'Ieškoma čia': 'Searching in',
+  'Visos šalys': 'All countries',
+  'Keisti': 'Change',
+  'Gerai': 'Done',
+  'Miestas, pvz., Kaunas': 'City, e.g. Kaunas',
+  'Šalis parinkta pagal jūsų vietą.': 'The country was chosen from your location.',
   'Išsaugotos paieškos': 'Saved searches',
   'Išsaugoti paiešką ir matyti naujus skelbimus': 'Save this search and see new listings',
   'Ši paieška išsaugota: naujus atitinkančius skelbimus pažymėsime čia ir paieškos skirtuke.': 'This search is saved: new matching listings are marked here and on the Search tab.',

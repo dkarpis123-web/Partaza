@@ -4,6 +4,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
+import { detectCountry } from '@/services/geo';
+
 import { EN, EN_PATTERNS } from './en';
 
 export type Lang = 'lt' | 'en';
@@ -16,8 +18,9 @@ function detect(): Lang {
   } catch {
     // storage unavailable: fall through to the device language
   }
+  // No saved choice: Lithuanian for people in Lithuania or with a Lithuanian device, English everywhere else.
   const device = (typeof navigator !== 'undefined' && navigator.language) || Intl.DateTimeFormat().resolvedOptions().locale || 'lt';
-  return device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
+  return detectCountry() === 'Lietuva' || device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
 }
 
 // The static web page is built in Lithuanian; the device language is applied once the app starts.

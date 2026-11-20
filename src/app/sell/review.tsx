@@ -6,6 +6,8 @@ import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
 import { COUNTRIES, detectCountry } from '@/services/geo';
+import { tr, useLang } from '@/i18n';
+import { flagOf } from '@/services/match';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -48,6 +50,7 @@ export default function ReviewScreen() {
 }
 
 function ReviewForm({ editing }: { editing?: Listing }) {
+  useLang();
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; donor?: string; whole?: string }>();
   const { listings, donors, registered, phone, addListing, updateListing } = useStore();
@@ -82,6 +85,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [country, setCountry] = useState(() => editing?.country ?? detectCountry() ?? 'Lietuva');
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
+  const [editCountry, setEditCountry] = useState(false);
   const [motorsport, setMotorsport] = useState(editing?.motorsport ?? false);
   const [description, setDescription] = useState(editing?.description ?? '');
   const [costText, setCostText] = useState(editing?.cost != null ? toText(editing.cost) : '');
@@ -187,8 +191,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           ))}
         </ScrollView>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Chip label="Senovinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
-          <Chip label="Automotosporto dalis" selected={motorsport} onPress={() => setMotorsport((v) => !v)} />
+          <Chip icon="car-convertible" label="Senovinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
+          <Chip icon="flag-checkered" label="Automotosporto dalis" selected={motorsport} onPress={() => setMotorsport((v) => !v)} />
         </View>
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Būklė</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -261,12 +265,20 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             <Chip key={s.label} label={s.label} selected={shipping === s.price} onPress={() => setShipping(s.price)} />
           ))}
         </View>
-        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Šalis, kurioje yra dalis</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {[country, ...COUNTRIES.filter((c) => c !== country)].map((c) => (
-            <Chip key={c} label={c} selected={country === c} onPress={() => setCountry(c)} />
-          ))}
-        </ScrollView>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, color: colors.muted }}>Šalis, kurioje yra dalis</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{`${flagOf(country)} ${tr(country)}`}</Text>
+          </View>
+          <Button label={editCountry ? 'Gerai' : 'Keisti'} kind="outline" onPress={() => setEditCountry((v) => !v)} />
+        </View>
+        {editCountry ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {COUNTRIES.map((c) => (
+              <Chip key={c} label={`${flagOf(c)} ${tr(c)}`} selected={country === c} onPress={() => { setCountry(c); setEditCountry(false); }} />
+            ))}
+          </View>
+        ) : null}
         <Field label="Miestas" value={city} onChangeText={setCity} placeholder="Pvz., Kaunas" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Leisti siūlyti kainą" selected={allowOffers} onPress={() => setAllowOffers((v) => !v)} />
