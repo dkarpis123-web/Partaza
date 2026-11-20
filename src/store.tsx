@@ -33,6 +33,8 @@ interface State {
   savedSearches: SavedSearch[];
   /** Ratings of the people on screen, and the ones I wrote. */
   reviews: Review[];
+  /** The seller's own VAT number, once it has been checked in the EU register; null if none. */
+  vatCode: string | null;
   /** Ids of people the signed-in person has blocked. Their listings and chats are hidden. */
   blocked: string[];
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
@@ -71,6 +73,11 @@ interface Store extends State {
   orderAction: (orderId: string, action: 'cancel' | 'hand' | 'complete') => Result;
   /** Saves or un-saves a listing. */
   toggleFavorite: (listingId: string) => Result;
+  /** Checks a VAT number in the EU register and records it if it is valid and in the seller's name. */
+  checkVat: (code: string) => Promise<{ ok?: boolean; error?: string; registeredName?: string }>;
+  removeVat: () => Result;
+  /** Changes the name shown to others. */
+  setName: (name: string) => Result;
   /** Rates the other side of a completed order: once, 1–5 stars. */
   leaveReview: (kind: 'order' | 'payment', orderId: string, stars: number, comment: string) => Result;
   /** Uploads the photos and asks the AI what part they show. Returns the uploaded photo links too. */
@@ -132,8 +139,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], reviews: [], orders: [], paidOrders: [], payReady: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], reviews: [], orders: [], paidOrders: [], payReady: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], reviews: [], vatCode: null, orders: [], paidOrders: [], payReady: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], following: [], savedSearches: [], reviews: [], vatCode: null, orders: [], paidOrders: [], payReady: [] };
 }
 
 let counter = 0;
@@ -153,6 +160,7 @@ const ERRORS: Record<string, string> = {
   own_listing: 'Savo skelbimo pirkti negalima.',
   not_allowed: 'Šio veiksmo dabar atlikti negalima.',
   already_reviewed: 'Šį užsakymą jau įvertinote.',
+  vat_code_required: 'Kainą su PVM gali nurodyti tik pardavėjas, patvirtinęs PVM mokėtojo kodą profilyje.',
   bad_stars: 'Pasirinkite nuo 1 iki 5 žvaigždučių.',
   user_blocked: 'Šiam naudotojui rašyti negalite: vienas iš jūsų užblokavo kitą.',
   'row-level security': 'Šis veiksmas neleidžiamas. Jei rašote kitam naudotojui, gali būti, kad vienas iš jūsų užblokavo kitą.',
@@ -198,7 +206,7 @@ function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
-    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping),
+    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote,
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
   };
@@ -261,6 +269,15 @@ const PAY_ERRORS: Record<string, string> = {
 };
 
 /** Calls the server's payment function. Resolves to its answer, or to a message for the user. */
+const VAT_ERRORS: Record<string, string> = {
+  bad_format: 'PVM kodas turi prasidėti šalies raidėmis, pvz., LT100009776219.',
+  not_valid: 'Tokio PVM mokėtojo kodo ES registre nėra.',
+  register_unavailable: 'ES PVM registras dabar neatsako. Bandykite po kelių minučių.',
+  name_mismatch: 'Šis PVM kodas registruotas kitu vardu nei jūsų paskyra. Paskyros vardas ir PVM mokėtojas turi sutapti.',
+  not_authenticated: 'Prisijunkite iš naujo.',
+  server_error: 'Nepavyko patikrinti PVM kodo. Bandykite dar kartą.',
+};
+
 const AI_ERRORS: Record<string, string> = {
   not_authenticated: 'DI įrankiai veikia tik prisijungus.',
   not_configured: 'DI įrankiai dar neįjungti.',
@@ -343,6 +360,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     let blocked: string[] = [];
     let favorites: string[] = [];
     let following: string[] = [];
+    let vatCode: string | null = null;
     let savedSearches: SavedSearch[] = [];
     let orders: Order[] = [];
     if (uid) {
@@ -350,6 +368,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       orders = (ordersRes.data ?? []).map(toOrder);
       const favoritesRes = await supabase.from('favorites').select('listing_id');
       favorites = (favoritesRes.data ?? []).map((f: Row) => f.listing_id);
+      const vatRes = await supabase.from('seller_vat').select('vat_code').eq('user_id', uid).maybeSingle();
+      vatCode = vatRes.data?.vat_code ?? null;
       const [followsRes, searchesRes] = await Promise.all([
         supabase.from('follows').select('seller_id'),
         supabase.from('saved_searches').select('*').order('created_at', { ascending: false }),
@@ -414,7 +434,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser).map((u) => rated(u, reviews));
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, following, savedSearches, reviews, orders, paidOrders, payReady });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, following, savedSearches, reviews, vatCode, orders, paidOrders, payReady });
   }, []);
 
   useEffect(() => {
@@ -550,6 +570,43 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (error) return explain(error);
       }
       setState((s) => ({ ...s, favorites: saved ? s.favorites.filter((id) => id !== listingId) : [...s.favorites, listingId] }));
+      return null;
+    };
+
+    const checkVat: Store['checkVat'] = async (code) => {
+      if (!supabase) {
+        setState((s) => ({ ...s, vatCode: code.toUpperCase().replace(/[^A-Z0-9]/g, '') }));
+        return { ok: true };
+      }
+      try {
+        const { data, error } = await supabase.functions.invoke('vat', { body: { action: 'check', code } });
+        if (error || !data) return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+        if (data.error) return { error: VAT_ERRORS[data.error] ?? VAT_ERRORS.server_error, registeredName: data.registered_name };
+        setState((s) => ({ ...s, vatCode: data.vat_code }));
+        return { ok: true, registeredName: data.registered_name };
+      } catch {
+        return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+      }
+    };
+
+    const removeVat: Store['removeVat'] = async () => {
+      if (supabase) {
+        const { data, error } = await supabase.functions.invoke('vat', { body: { action: 'remove' } });
+        if (error || data?.error) return 'Nepavyko pašalinti PVM kodo. Bandykite dar kartą.';
+      }
+      setState((s) => ({ ...s, vatCode: null }));
+      return null;
+    };
+
+    const setName: Store['setName'] = async (name) => {
+      const { me } = stateRef.current;
+      const clean = name.trim().slice(0, 80);
+      if (!clean) return 'Įrašykite vardą arba įmonės pavadinimą.';
+      if (supabase) {
+        const { error } = await supabase.from('profiles').update({ name: clean }).eq('id', me.id);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, me: { ...s.me, name: clean }, users: s.users.map((u) => (u.id === s.me.id ? { ...u, name: clean } : u)) }));
       return null;
     };
 
@@ -803,7 +860,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
           defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
-          classic: !!draft.classic, motorsport: !!draft.motorsport, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
+          classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
         })
         .select()
         .single();
@@ -833,7 +890,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .update({
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
-            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, whole_vehicle: !!draft.wholeVehicle,
+            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, whole_vehicle: !!draft.wholeVehicle,
             description: draft.description ?? '',
           })
           .eq('id', listingId);
@@ -1024,7 +1081,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, aiRecognize, aiMatch, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

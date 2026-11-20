@@ -24,8 +24,10 @@ const SORT_LABELS: Record<Sort, string> = {
 };
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 
-function totalPrice(listing: Listing): number {
-  return listing.price + (listing.shipping ?? 0);
+/** Price with delivery to the buyer's country, or null when the delivery price there is not known (pickup only, on request, or another country). */
+function totalPrice(listing: Listing, destination: string | null): number | null {
+  if (!destination || listing.shipping === null || listing.country !== destination) return null;
+  return listing.price + listing.shipping;
 }
 
 export default function SearchScreen() {
@@ -159,9 +161,15 @@ export default function SearchScreen() {
     return filtered.sort((a, b) => {
       if (sort === 'newest') return b.createdAt - a.createdAt;
       if (sort === 'place') return `${countryName(a.country)} ${a.city}`.localeCompare(`${countryName(b.country)} ${b.city}`, 'lt');
-      return totalPrice(a) - totalPrice(b);
+      // With a destination: known totals first, cheapest first; the rest after them by price alone.
+      const ta = totalPrice(a, home);
+      const tb = totalPrice(b, home);
+      if (ta !== null && tb !== null) return ta - tb;
+      if (ta !== null) return -1;
+      if (tb !== null) return 1;
+      return a.price - b.price;
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit]);
+  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit, home]);
 
   return (
     <Page>
@@ -297,6 +305,7 @@ export default function SearchScreen() {
             <Chip label="Tik be defektų" selected={onlyNoDefects} onPress={() => setOnlyNoDefects((v) => !v)} />
           </View>
           <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Rikiuoti</Text>
+          <Muted>{home ? `${tr('Kaina su siuntimu skaičiuojama pristatymui į')}: ${countryLabel(home)}. ${tr('Kitų šalių skelbimams ir skelbimams be siuntimo kainos rodoma tik dalies kaina.')}` : tr('Kad rikiuotume kartu su siuntimo kaina, leiskite naudoti vietą – tada žinosime gavėjo šalį. Dabar rikiuojama tik pagal dalies kainą.')}</Muted>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
               <Chip key={s} label={SORT_LABELS[s]} selected={sort === s} onPress={() => setSort(s)} />

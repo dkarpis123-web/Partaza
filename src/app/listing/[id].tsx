@@ -6,7 +6,7 @@ import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
-import { countryLabel } from '@/services/geo';
+import { countryLabel, countryName, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
@@ -14,8 +14,9 @@ import { Text } from '@/components/Text';
 
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { place } = useGeo();
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
   const [buying, setBuying] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
@@ -57,6 +58,16 @@ export default function ListingScreen() {
     if (!opened.id) return setError(opened.error ?? 'Nepavyko pradėti pokalbio.');
     router.push(`/chat/${opened.id}`);
   };
+
+  const askShipping = async () => {
+    if (live && !registered) return router.push('/register');
+    const opened = await openThread(listing.id);
+    if (!opened.id) return setError(opened.error ?? 'Nepavyko pradėti pokalbio.');
+    const where = place?.country ? `${place.city ? `${place.city}, ` : ''}${countryName(place.country)}` : '';
+    await sendText(opened.id, where ? `Sveiki, kiek kainuotų šios dalies siuntimas į ${where}?` : 'Sveiki, kiek kainuotų šios dalies siuntimas? Parašysiu, kur siųsti.');
+    router.push(`/chat/${opened.id}`);
+  };
+  const abroad = !!place?.country && place.country !== listing.country;
 
   const sendReport = async () => {
     if (live && !registered) return router.push('/register');
@@ -206,6 +217,12 @@ export default function ListingScreen() {
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
+        {!mine && (listing.shippingQuote || (abroad && listing.shipping !== null)) ? (
+          <>
+            {abroad && listing.shipping !== null ? <Muted>Nurodyta siuntimo kaina galioja pardavėjo šalyje. Siuntimo į jūsų šalį kainos teiraukitės pardavėjo.</Muted> : null}
+            <Button label="Klausti siuntimo kainos" kind="outline" onPress={askShipping} />
+          </>
+        ) : null}
       </Card>
 
       <Card>

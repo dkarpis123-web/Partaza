@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { Button, Field, Heading, Muted, Notice, Page } from '@/components/ui';
-import { normalizePhone } from '@/services/phone';
+import { useGeo } from '@/services/geo';
+import { normalizePhone, phoneExample } from '@/services/phone';
 import { ALREADY_REGISTERED, useStore } from '@/store';
 import { colors, radius } from '@/theme';
 import type { SellerKind } from '@/types';
@@ -27,12 +28,13 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const { place } = useGeo();
   const isSignIn = live && mode === 'signIn';
 
   const submit = async () => {
     if (busy) return;
     if (!isSignIn && !name.trim()) return setError('Įrašykite vardą arba įmonės pavadinimą.');
-    const phoneNumber = normalizePhone(phone);
+    const phoneNumber = normalizePhone(phone, place?.country ?? 'LT');
     if (!isSignIn && !phoneNumber) return setError('Įrašykite telefono numerį, pvz., +37061234567.');
     if (!live) {
       registerDemo(name.trim(), kind, phoneNumber ?? '');
@@ -93,7 +95,7 @@ export default function RegisterScreen() {
             );
           })}
           <Field label="Vardas arba įmonės pavadinimas" value={name} onChangeText={(t) => { setName(t); clear(); }} placeholder="Pvz., Tomas V." />
-          <Field label="Telefono numeris" value={phone} onChangeText={(t) => { setPhone(t); clear(); }} keyboardType="phone-pad" autoComplete="tel" placeholder="+37061234567" hint="Būtinas. Kitiems naudotojams nerodomas." />
+          <Field label="Telefono numeris" value={phone} onChangeText={(t) => { setPhone(t); clear(); }} keyboardType="phone-pad" autoComplete="tel" placeholder={phoneExample(place?.country)} hint="Būtinas. Kitiems naudotojams nerodomas." />
         </>
       )}
       {live ? (

@@ -893,6 +893,43 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- VAT: a seller may mark a price as "including VAT" only after their VAT number was checked in the
+-- EU register (VIES) by the "vat" edge function and recorded here.
+-- ---------------------------------------------------------------------------
+alter table public.listings add column if not exists shipping_quote boolean not null default false;
+
+create table if not exists public.seller_vat (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  vat_code text not null,
+  registered_name text not null default '',
+  verified_at timestamptz not null default now()
+);
+alter table public.seller_vat enable row level security;
+revoke all on public.seller_vat from anon, authenticated;
+grant select on public.seller_vat to authenticated;
+drop policy if exists seller_vat_own on public.seller_vat;
+create policy seller_vat_own on public.seller_vat for select to authenticated using (user_id = (select auth.uid()));
+
+create or replace function public.listing_vat_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.vat and (tg_op = 'INSERT' or not old.vat) then
+    if not exists (select 1 from public.seller_vat v where v.user_id = new.seller_id) then
+      raise exception 'vat_code_required';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists listing_vat_guard on public.listings;
+create trigger listing_vat_guard before insert or update of vat on public.listings
+  for each row execute function public.listing_vat_guard();
+
+-- ---------------------------------------------------------------------------
 -- AI helpers (the "ai" edge function): how many calls each user made today.
 -- ---------------------------------------------------------------------------
 create table if not exists public.ai_usage (

@@ -49,6 +49,24 @@ async function claude(body: Json): Promise<Json> {
   return json;
 }
 
+/** The arguments Claude passed to our tool; if it answered in text instead, the JSON object in that text. */
+function toolInput(result: Json, name: string): Json {
+  const blocks: Json[] = result.content ?? [];
+  const call = blocks.find((b) => b.type === 'tool_use' && b.name === name);
+  if (call?.input) return call.input;
+  const written = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  const object = written.match(/\{[\s\S]*\}/);
+  if (object) {
+    try {
+      return JSON.parse(object[0]);
+    } catch (_) {
+      // not JSON after all
+    }
+  }
+  console.error('ai: no tool call', name, result.stop_reason, written.slice(0, 200));
+  return {};
+}
+
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const language = (lang: unknown) => (lang === 'en' ? 'English' : 'Lithuanian');
 
@@ -60,7 +78,7 @@ async function recognize(body: Json): Promise<Json> {
 
   const result = await claude({
     model: VISION_MODEL,
-    max_tokens: 700,
+    max_tokens: 2000,
     tools: [{
       name: 'describe_part',
       description: 'Records what the photographed vehicle part is.',
@@ -76,16 +94,15 @@ async function recognize(body: Json): Promise<Json> {
         required: ['title', 'oem', 'fits', 'vehicle_type', 'defects'],
       },
     }],
-    tool_choice: { type: 'tool', name: 'describe_part' },
     messages: [{
       role: 'user',
       content: [
         ...photos.map((url: string) => ({ type: 'image', source: { type: 'url', url } })),
-        { type: 'text', text: `These are a seller's photos of one vehicle part for a marketplace listing. Describe it with the describe_part tool. Write the title, fits and defects in ${language(body.lang)}. Report only what you can see or read; leave a field empty rather than guess.` },
+        { type: 'text', text: `These are a seller's photos of one vehicle part for a marketplace listing. Read every number and label you can see, then call the describe_part tool exactly once with the result (do not answer in plain text). Write the title, fits and defects in ${language(body.lang)}. Report only what you can see or read; leave a field empty rather than guess.` },
       ],
     }],
   });
-  const found = (result.content ?? []).find((b: Json) => b.type === 'tool_use' && b.name === 'describe_part')?.input ?? {};
+  const found = toolInput(result, 'describe_part');
   return {
     title: text(found.title, 120),
     oem: text(found.oem, 60),
@@ -110,7 +127,7 @@ async function match(body: Json, admin: any): Promise<Json> {
 
   const result = await claude({
     model: VISION_MODEL,
-    max_tokens: 500,
+    max_tokens: 2000,
     tools: [{
       name: 'report_matches',
       description: 'Reports what part the photo shows and which listings offer the same kind of part.',
@@ -124,7 +141,6 @@ async function match(body: Json, admin: any): Promise<Json> {
         required: ['part_name', 'oem', 'matches'],
       },
     }],
-    tool_choice: { type: 'tool', name: 'report_matches' },
     messages: [{
       role: 'user',
       content: [
@@ -134,13 +150,13 @@ async function match(body: Json, admin: any): Promise<Json> {
           text:
             `A buyer photographed a vehicle part they are looking for. Name the part in ${language(body.lang)} and read its part number if one is clearly visible. ` +
             `Then choose from the listings below those that offer the same kind of part (the same component; an identical part number is the best match). ` +
-            `Do not include listings for a different component just because they fit the same vehicle.\n\n` +
+            `Do not include listings for a different component just because they fit the same vehicle. Answer by calling the report_matches tool exactly once (do not answer in plain text).\n\n` +
             `Listings (number | title | part number | fits | vehicle type):\n${catalogue || '(no listings)'}`,
         },
       ],
     }],
   });
-  const found = (result.content ?? []).find((b: Json) => b.type === 'tool_use' && b.name === 'report_matches')?.input ?? {};
+  const found = toolInput(result, 'report_matches');
   const ids = (Array.isArray(found.matches) ? found.matches : [])
     .map((n: unknown) => listings[Number(n) - 1]?.id)
     .filter((id: unknown, i: number, all: unknown[]) => typeof id === 'string' && all.indexOf(id) === i)

@@ -23,7 +23,7 @@ export function Photo({ uri, height, whole = false }: { uri?: string; height: nu
 }
 
 export function deliveryText(listing: Listing): string {
-  if (listing.shipping === null) return 'Tik atsiėmimas vietoje';
+  if (listing.shipping === null) return listing.shippingQuote ? 'Siuntimo kaina – pagal užklausą' : 'Tik atsiėmimas vietoje';
   return `+ ${money(listing.shipping)} pristatymas`;
 }
 

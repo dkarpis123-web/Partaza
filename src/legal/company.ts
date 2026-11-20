@@ -48,6 +48,7 @@ export const TERMS: LegalSection[] = [
       'Pardavėjas atsako už tai, kad skelbimas būtų teisingas: dalies pavadinimas, numeris, būklė, kaina ir nuotraukos turi atitikti tikrovę. Visi žinomi pažeidimai ir trūkumai turi būti nurodyti.',
       'Skelbti galima tik tas dalis ir transporto priemones, kurias turite teisę parduoti ir kurių pardavimas yra teisėtas. Už dalies teisėtumą, saugumą ir tinkamumą naudoti, įskaitant saugos sistemų dalis, atsako pardavėjas.',
       'Dalies tinkamumas konkrečiai transporto priemonei nurodomas pagal pardavėjo pateiktą informaciją. Prieš pirkdami sutikrinkite dalies numerį.',
+      'Siuntimo kainą skelbime nustato pardavėjas. Platformos siūlomos siuntimo kainos pagal siuntos dydį yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų; už siuntimo kainos skirtumą atsako pardavėjas. Jeigu pardavėjas siuntimo kainos nenurodo arba dalis siunčiama į kitą šalį, pirkėjas dėl kainos teiraujasi pardavėjo. Kainą su PVM gali nurodyti tik pardavėjas, kurio PVM mokėtojo kodas patikrintas ES registre.',
       'Draudžiama skelbti vogtas, suklastotas dalis, su transportu nesusijusius daiktus, klaidinančią ar įžeidžiančią informaciją, kitų asmenų duomenis ir svetimas nuotraukas be leidimo.',
     ],
   },

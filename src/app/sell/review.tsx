@@ -16,12 +16,13 @@ import { Text } from '@/components/Text';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 const CONDITIONS = Object.keys(CONDITION_LABELS) as Condition[];
-const SHIPPING: { label: string; price: number | null }[] = [
+/** Only suggestions: the seller sets the real shipping price and answers for the difference. */
+const SHIPPING: { label: string; price: number }[] = [
   { label: 'Maža, iki 2 kg · 2,90 €', price: 2.9 },
   { label: 'Vidutinė, iki 10 kg · 3,50 €', price: 3.5 },
   { label: 'Didelė, iki 30 kg · 5,90 €', price: 5.9 },
-  { label: 'Tik atsiėmimas vietoje', price: null },
 ];
+type ShipMode = 'price' | 'quote' | 'pickup';
 
 function parsePrice(text: string): number | null {
   const value = Number(text.replace(',', '.').trim());
@@ -53,7 +54,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   useLang();
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; donor?: string; whole?: string }>();
-  const { listings, donors, registered, phone, addListing, updateListing, live, ready, aiRecognize, aiPrices } = useStore();
+  const { listings, donors, registered, phone, addListing, updateListing, live, ready, aiRecognize, aiPrices, vatCode } = useStore();
   const whole = editing ? !!editing.wholeVehicle : params.whole === '1';
   const donor = donors.find((d) => d.id === (editing ? editing.donorId : params.donor));
 
@@ -80,7 +81,9 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [newDefect, setNewDefect] = useState('');
   const [priceText, setPriceText] = useState(editing ? toText(editing.price) : '');
   const [vat, setVat] = useState(editing?.vat ?? false);
-  const [shipping, setShipping] = useState<number | null>(editing ? editing.shipping : whole ? null : 3.5);
+  const [shipMode, setShipMode] = useState<ShipMode>(editing ? (editing.shipping !== null ? 'price' : editing.shippingQuote ? 'quote' : 'pickup') : whole ? 'pickup' : 'price');
+  const [shipText, setShipText] = useState(editing?.shipping != null ? toText(editing.shipping) : whole ? '' : '3,50');
+  const [vatHint, setVatHint] = useState(false);
   const [city, setCity] = useState(editing?.city ?? '');
   const [country, setCountry] = useState(() => editing?.country ?? detectCountry() ?? 'LT');
   const [countryFilter, setCountryFilter] = useState('');
@@ -161,6 +164,9 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (!title.trim()) return setError('Įrašykite pavadinimą.');
     if (price === null) return setError('Įrašykite kainą, pvz., 85 arba 85,50.');
     if (!city.trim()) return setError('Įrašykite miestą, kuriame yra dalis.');
+    const shipping = shipMode === 'price' ? parsePrice(shipText) : null;
+    if (shipMode === 'price' && shipping === null) return setError('Įrašykite siuntimo kainą, pvz., 3,50, arba pasirinkite kitą siuntimo būdą.');
+    const shippingQuote = shipMode === 'quote';
     const cost = costText.trim() ? parsePrice(costText) : null;
     if (costText.trim() && cost === null) return setError('Pirkimo kainą įrašykite skaičiumi, pvz., 20.');
     if (!registered) {
@@ -172,7 +178,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     setPublishing(true);
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, pickup: true, photos, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, pickup: true, photos, allowOffers,
       classic, motorsport, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
@@ -183,7 +189,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     }
     const result = await addListing(whole ? draft : { description: description.trim(),
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, pickup: true, photos, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, pickup: true, photos, allowOffers,
       classic, motorsport, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     });
     setPublishing(false);
@@ -336,14 +342,31 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         )}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Be PVM" selected={!vat} onPress={() => setVat(false)} />
-          <Chip label="Su PVM (PVM mokėtojams)" selected={vat} onPress={() => setVat(true)} />
+          <Chip label="Su PVM (PVM mokėtojams)" selected={vat} onPress={() => (live && !vatCode ? setVatHint(true) : setVat(true))} />
         </View>
-        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Siuntos dydis (pristatymą moka pirkėjas)</Text>
+        {vatHint && !vatCode ? (
+          <Notice tone="warn">Kainą su PVM gali nurodyti tik pardavėjas, patvirtinęs PVM mokėtojo kodą profilyje.</Notice>
+        ) : null}
+        {vatHint && !vatCode ? <Button label="Įrašyti PVM kodą profilyje" kind="outline" onPress={() => router.push('/profile')} /> : null}
+        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Siuntimas (pristatymą moka pirkėjas)</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {SHIPPING.map((s) => (
-            <Chip key={s.label} label={s.label} selected={shipping === s.price} onPress={() => setShipping(s.price)} />
-          ))}
+          <Chip label="Nurodau siuntimo kainą" selected={shipMode === 'price'} onPress={() => setShipMode('price')} />
+          <Chip label="Kainos nenurodau – pirkėjas siunčia užklausą" selected={shipMode === 'quote'} onPress={() => setShipMode('quote')} />
+          <Chip label="Tik atsiėmimas vietoje" selected={shipMode === 'pickup'} onPress={() => setShipMode('pickup')} />
         </View>
+        {shipMode === 'price' ? (
+          <>
+            <Field label="Siuntimo kaina jūsų šalyje, €" value={shipText} onChangeText={setShipText} keyboardType="decimal-pad" placeholder="0,00" />
+            <Muted>Mūsų siūlomos kainos pagal siuntos dydį:</Muted>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {SHIPPING.map((s) => (
+                <Chip key={s.label} label={s.label} selected={parsePrice(shipText) === s.price} onPress={() => setShipText(toText(s.price))} />
+              ))}
+            </View>
+            <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas. Siunčiant į kitą šalį, pirkėjas kainos teiraujasi žinute.</Notice>
+          </>
+        ) : null}
+        {shipMode === 'quote' ? <Muted>Pirkėjas matys mygtuką „Klausti siuntimo kainos“ ir parašys jums žinutę su savo šalimi ir miestu.</Muted> : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 13, color: colors.muted }}>Šalis, kurioje yra dalis</Text>

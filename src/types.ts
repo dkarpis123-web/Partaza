@@ -81,6 +81,8 @@ export interface Listing {
   country: string;
   /** Delivery price paid by the buyer; null = pickup only. */
   shipping: number | null;
+  /** The seller ships but has not set a price: the buyer asks for it in a message. */
+  shippingQuote?: boolean;
   pickup: boolean;
   sellerId: string;
   photos: string[];

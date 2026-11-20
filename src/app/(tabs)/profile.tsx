@@ -6,8 +6,10 @@ import { View, useWindowDimensions } from 'react-native';
 import { ListingGrid } from '@/components/ListingCard';
 import { BlockedUsers } from '@/components/BlockedUsers';
 import { SellerLogo } from '@/components/SellerLogo';
+import { VatCard } from '@/components/VatCard';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
-import { normalizePhone } from '@/services/phone';
+import { useGeo } from '@/services/geo';
+import { normalizePhone, phoneExample } from '@/services/phone';
 import { STALE_DAYS, staleListings } from '@/services/stats';
 import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
@@ -29,6 +31,7 @@ export default function ProfileScreen() {
   const [error, setError] = useState('');
   const show = (problem: string | null) => setError(problem ?? '');
   const [logoBusy, setLogoBusy] = useState(false);
+  const { place } = useGeo();
   const pickLogo = async () => {
     if (logoBusy) return;
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [1, 1] });
@@ -72,6 +75,8 @@ export default function ProfileScreen() {
         <Muted>Statusą pirkėjai mato kiekviename jūsų skelbime. Verslo pardavėjų pirkėjams taikoma 14 dienų grąžinimo teisė.</Muted>
       </Card>
 
+      <VatCard />
+
       <Card>
         <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Telefono numeris</Text>
         {phoneText === null ? (
@@ -81,14 +86,14 @@ export default function ProfileScreen() {
           </>
         ) : (
           <>
-            <Field label="Telefono numeris" value={phoneText} onChangeText={setPhoneText} keyboardType="phone-pad" autoComplete="tel" placeholder="+37061234567" />
+            <Field label="Telefono numeris" value={phoneText} onChangeText={setPhoneText} keyboardType="phone-pad" autoComplete="tel" placeholder={phoneExample(place?.country)} />
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Button label="Atšaukti" kind="outline" onPress={() => { setPhoneText(null); setError(''); }} style={{ flex: 1 }} />
               <Button
                 label="Išsaugoti"
                 style={{ flex: 1 }}
                 onPress={async () => {
-                  const value = normalizePhone(phoneText);
+                  const value = normalizePhone(phoneText, place?.country ?? 'LT');
                   if (!value) return setError('Įrašykite telefono numerį, pvz., +37061234567.');
                   const problem = await setPhone(value);
                   show(problem);
