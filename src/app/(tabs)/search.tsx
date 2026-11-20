@@ -8,6 +8,7 @@ import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
 import { COUNTRIES, countryLabel, countryName, setDestination, useDestination, useGeo } from '@/services/geo';
+import { shippingTo } from '@/services/shipping';
 import { tr, useLang } from '@/i18n';
 import { newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
@@ -26,8 +27,8 @@ const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 
 /** Price with delivery to the buyer's country, or null when the delivery price there is not known (pickup only, on request, or another country). */
 function totalPrice(listing: Listing, destination: string | null): number | null {
-  if (!destination || listing.shipping === null || listing.country !== destination) return null;
-  return listing.price + listing.shipping;
+  const shipping = shippingTo(listing, destination);
+  return shipping === null ? null : listing.price + shipping;
 }
 
 export default function SearchScreen() {
@@ -334,7 +335,7 @@ export default function SearchScreen() {
               {manualDest ? <Button label={home ? 'Naudoti mano vietos šalį' : 'Išvalyti gavėjo šalį'} kind="quiet" onPress={() => { setDestination(null); setEditDest(false); }} /> : null}
             </>
           ) : null}
-          <Muted>{dest ? `${tr('Kaina su siuntimu skaičiuojama pristatymui į')}: ${countryLabel(dest)}. ${tr('Kitų šalių skelbimams ir skelbimams be siuntimo kainos rodoma tik dalies kaina.')}` : tr('Kad rikiuotume kartu su siuntimo kaina, nurodykite gavėjo šalį arba leiskite naudoti vietą. Dabar rikiuojama tik pagal dalies kainą.')}</Muted>
+          <Muted>{dest ? `${tr('Kaina su siuntimu skaičiuojama pristatymui į')}: ${countryLabel(dest)}. ${tr('Skelbimams be siuntimo kainos į šią šalį rodoma tik dalies kaina.')}` : tr('Kad rikiuotume kartu su siuntimo kaina, nurodykite gavėjo šalį arba leiskite naudoti vietą. Dabar rikiuojama tik pagal dalies kainą.')}</Muted>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
               <Chip key={s} label={SORT_LABELS[s]} selected={sort === s} onPress={() => setSort(s)} />

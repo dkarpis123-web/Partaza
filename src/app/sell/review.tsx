@@ -82,6 +82,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [priceText, setPriceText] = useState(editing ? toText(editing.price) : '');
   const [vat, setVat] = useState(editing?.vat ?? false);
   const [shipMode, setShipMode] = useState<ShipMode>(editing ? (editing.shipping !== null ? 'price' : editing.shippingQuote ? 'quote' : 'pickup') : whole ? 'pickup' : 'price');
+  const [abroadText, setAbroadText] = useState(editing?.shippingAbroad != null ? toText(editing.shippingAbroad) : '');
   const [shipText, setShipText] = useState(editing?.shipping != null ? toText(editing.shipping) : whole ? '' : '3,50');
   const [vatHint, setVatHint] = useState(false);
   const [city, setCity] = useState(editing?.city ?? '');
@@ -166,6 +167,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (!city.trim()) return setError('Įrašykite miestą, kuriame yra dalis.');
     const shipping = shipMode === 'price' ? parsePrice(shipText) : null;
     if (shipMode === 'price' && shipping === null) return setError('Įrašykite siuntimo kainą, pvz., 3,50, arba pasirinkite kitą siuntimo būdą.');
+    const shippingAbroad = shipMode === 'price' && abroadText.trim() ? parsePrice(abroadText) : null;
+    if (shipMode === 'price' && abroadText.trim() && shippingAbroad === null) return setError('Siuntimo į kitas šalis kainą įrašykite skaičiumi, pvz., 12,00, arba palikite laukelį tuščią.');
     const shippingQuote = shipMode === 'quote';
     const cost = costText.trim() ? parsePrice(costText) : null;
     if (costText.trim() && cost === null) return setError('Pirkimo kainą įrašykite skaičiumi, pvz., 20.');
@@ -178,7 +181,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     setPublishing(true);
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, shippingQuote, pickup: true, photos, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, allowOffers,
       classic, motorsport, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
@@ -189,7 +192,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     }
     const result = await addListing(whole ? draft : { description: description.trim(),
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, shippingQuote, pickup: true, photos, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, allowOffers,
       classic, motorsport, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     });
     setPublishing(false);
@@ -363,7 +366,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
                 <Chip key={s.label} label={s.label} selected={parsePrice(shipText) === s.price} onPress={() => setShipText(toText(s.price))} />
               ))}
             </View>
-            <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas. Siunčiant į kitą šalį, pirkėjas kainos teiraujasi žinute.</Notice>
+            <Field label="Siuntimo kaina į kitas ES šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
+            <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas.</Notice>
           </>
         ) : null}
         {shipMode === 'quote' ? <Muted>Pirkėjas matys mygtuką „Klausti siuntimo kainos“ ir parašys jums žinutę su savo šalimi ir miestu.</Muted> : null}
@@ -392,6 +396,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         </View>
       </Card>
 
+      {publishing ? <Notice>Keliamos nuotraukos ir saugomas skelbimas. Tai gali užtrukti iki minutės – neuždarykite lango.</Notice> : null}
       {error ? <Notice tone="warn">{error}</Notice> : null}
     </Page>
   );

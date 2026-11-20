@@ -401,6 +401,16 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   if (listing.seller_id === user.id) return { error: 'own_listing' };
   if (delivery === 'shipping' && listing.shipping === null) return { error: 'no_shipping' };
   if (delivery === 'pickup' && !listing.pickup) return { error: 'no_pickup' };
+  // Delivery is charged for one named country: the seller's own price at home, the seller's price
+  // for abroad elsewhere. Without a price for that country there is nothing to charge - the buyer asks first.
+  const home = String(listing.country ?? 'LT').toUpperCase();
+  const shipCountry = delivery === 'shipping' ? (typeof body.country === 'string' ? body.country.toUpperCase() : home) : null;
+  let rate: unknown = null;
+  if (shipCountry) {
+    if (!/^[A-Z]{2}$/.test(shipCountry) || (shipCountry !== home && !EU.includes(shipCountry))) return { error: 'no_shipping_abroad' };
+    rate = shipCountry === home ? listing.shipping : listing.shipping_abroad;
+    if (rate === null || rate === undefined) return { error: 'no_shipping_abroad' };
+  }
 
   const { data: blocks } = await admin
     .from('blocks')
@@ -428,7 +438,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
     if (accepted && accepted.length > 0) price = Math.min(price, Number(accepted[0].amount));
   }
   const item = Math.round(price * 100);
-  const shipping = delivery === 'shipping' ? Math.round(Number(listing.shipping) * 100) : 0;
+  const shipping = shipCountry ? Math.round(Number(rate) * 100) : 0;
   const protection = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round(((item + shipping) * FEE_PERCENT) / 100) + FEE_FIXED : 0;
   const fee = protection + ADMIN_FEE;
   const total = item + shipping + fee;
@@ -446,7 +456,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
     .from('payment_orders')
     .insert({
       listing_id: listingId, buyer_id: user.id, seller_id: listing.seller_id, title: listing.title,
-      item_amount: item, shipping_amount: shipping, fee_amount: fee, total_amount: total, delivery,
+      item_amount: item, shipping_amount: shipping, fee_amount: fee, total_amount: total, delivery, ship_country: shipCountry,
     })
     .select()
     .single();
@@ -470,7 +480,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
         metadata: { order_id: order.id },
         payment_intent_data: { transfer_group: order.id, metadata: { order_id: order.id }, description: `Partaza: ${String(listing.title).slice(0, 100)}` },
         phone_number_collection: { enabled: true },
-        ...(delivery === 'shipping' ? { shipping_address_collection: { allowed_countries: EU } } : {}),
+        ...(delivery === 'shipping' ? { shipping_address_collection: { allowed_countries: [shipCountry] } } : {}),
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
         success_url: `${site}/payment/${order.id}?paid=1`,
         cancel_url: `${site}/listing/${listingId}`,

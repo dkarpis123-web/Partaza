@@ -1,3 +1,4 @@
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -117,7 +118,7 @@ interface Store extends State {
   answerOffer: (threadId: string, messageId: string, status: 'accepted' | 'declined') => Result;
   report: (listingId: string) => Result;
   /** Starts a payment; resolves to the address of the payment page. */
-  buy: (listingId: string, delivery: 'shipping' | 'pickup') => Promise<{ url?: string; error?: string }>;
+  buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string) => Promise<{ url?: string; error?: string }>;
   /** Asks the server to check with the payment provider whether an order has been paid. */
   syncOrder: (orderId: string) => Result;
   orderStep: (orderId: string, step: OrderStep, text?: string) => Result;
@@ -206,7 +207,7 @@ function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
-    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote,
+    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
   };
@@ -248,6 +249,31 @@ function toPaidOrder(row: Row): PaidOrder {
   };
 }
 
+/** Rejects with 'timeout' if the promise takes longer than the given time. */
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (reason) => { clearTimeout(timer); reject(reason); },
+    );
+  });
+}
+
+/** Phone photos are 5-10 MB; 2000 px on the long side keeps part numbers readable and uploads fast. */
+async function shrinkPhoto(uri: string): Promise<string> {
+  try {
+    const image = await ImageManipulator.manipulate(uri).renderAsync();
+    const longest = Math.max(image.width, image.height);
+    const sized = longest > 2000
+      ? await ImageManipulator.manipulate(image).resize(image.width >= image.height ? { width: 2000 } : { height: 2000 }).renderAsync()
+      : image;
+    return (await sized.saveAsync({ compress: 0.8, format: SaveFormat.JPEG })).uri;
+  } catch {
+    return uri;
+  }
+}
+
 const PAY_ERRORS: Record<string, string> = {
   not_authenticated: 'Pirmiausia prisijunkite.',
   not_configured: 'Mokėjimai per Partaza dar neįjungti.',
@@ -256,6 +282,7 @@ const PAY_ERRORS: Record<string, string> = {
   listing_reserved: 'Šią dalį šiuo metu apmoka kitas pirkėjas. Pabandykite po pusvalandžio.',
   own_listing: 'Savo skelbimo pirkti negalima.',
   no_shipping: 'Pardavėjas šios dalies nesiunčia – galimas tik atsiėmimas.',
+  no_shipping_abroad: 'Pardavėjas nenurodė siuntimo kainos į šią šalį. Paklauskite jo siuntimo kainos žinute.',
   no_pickup: 'Šios dalies atsiimti negalima – tik pristatymas.',
   user_blocked: 'Pirkti negalite: vienas iš jūsų užblokavo kitą.',
   seller_not_ready: 'Pardavėjas dar nepriima mokėjimų per Partaza. Susitarkite žinutėmis.',
@@ -748,25 +775,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Uploads photos that are still on the device and returns public links for all of them.
     const uploadPhotos = async (photos: string[], ownerId: string): Promise<{ urls?: string[]; error?: string }> => {
       if (!supabase) return { urls: photos };
-      const urls: string[] = [];
-      for (let i = 0; i < photos.length; i += 1) {
+      const client = supabase;
+      const urls: string[] = new Array(photos.length);
+      // One photo: shrink it, then upload, giving up after a while instead of waiting forever.
+      const one = async (i: number) => {
         const uri = photos[i];
         if (/^https?:\/\//.test(uri)) {
-          urls.push(uri);
-          continue;
+          urls[i] = uri;
+          return;
         }
-        try {
-          const response = await fetch(uri);
-          const bytes = await response.arrayBuffer();
-          const type = response.headers.get('content-type') || 'image/jpeg';
-          const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
-          const path = `${ownerId}/${Date.now()}_${i}.${extension}`;
-          const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType: type });
-          if (error) return { error: explain(error) };
-          urls.push(supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl);
-        } catch {
-          return { error: 'Nepavyko įkelti nuotraukos. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
-        }
+        const small = await shrinkPhoto(uri);
+        const response = await fetch(small);
+        const bytes = await response.arrayBuffer();
+        const type = response.headers.get('content-type') || 'image/jpeg';
+        const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+        const path = `${ownerId}/${Date.now()}_${i}.${extension}`;
+        const { error } = await withTimeout(client.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType: type }), 90_000);
+        if (error) throw new Error(explain(error));
+        urls[i] = client.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+      };
+      try {
+        // Three at a time: quicker than one by one, gentle enough for a phone connection.
+        let next = 0;
+        const worker = async () => {
+          while (next < photos.length) {
+            const i = next;
+            next += 1;
+            await one(i);
+          }
+        };
+        await Promise.all([worker(), worker(), worker()]);
+      } catch (failure) {
+        const message = failure instanceof Error ? failure.message : '';
+        return { error: message && message !== 'timeout' && !/fetch|network/i.test(message) ? message : 'Nepavyko įkelti nuotraukos. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
       }
       return { urls };
     };
@@ -860,7 +901,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
           defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
-          classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
+          classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
         })
         .select()
         .single();
@@ -890,7 +931,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .update({
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
-            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, whole_vehicle: !!draft.wholeVehicle,
+            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle,
             description: draft.description ?? '',
           })
           .eq('id', listingId);
@@ -1031,8 +1072,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return error ? explain(error) : null;
     };
 
-    const buy: Store['buy'] = async (listingId, delivery) => {
-      const answer = await pay({ action: 'checkout', listing_id: listingId, delivery });
+    const buy: Store['buy'] = async (listingId, delivery, country) => {
+      const answer = await pay({ action: 'checkout', listing_id: listingId, delivery, ...(country ? { country } : {}) });
       if (answer.error) return { error: answer.error };
       return answer.data?.url ? { url: String(answer.data.url) } : { error: PAY_ERRORS.stripe_error };
     };

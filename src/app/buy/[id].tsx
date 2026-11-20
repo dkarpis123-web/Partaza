@@ -3,10 +3,13 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import { Button, Card, Chip, Muted, Notice, Page, Row } from '@/components/ui';
+import { COUNTRIES, countryLabel, countryName, setDestination, useDestination } from '@/services/geo';
+import { normalize } from '@/services/match';
 import { openExternal } from '@/services/open';
+import { shippingTo } from '@/services/shipping';
 import { useStore } from '@/store';
-import { ADMIN_FEE, buyerFee, colors, money } from '@/theme';
-import { Text } from '@/components/Text';
+import { ADMIN_FEE, buyerFee, colors, money, radius } from '@/theme';
+import { Text, TextInput } from '@/components/Text';
 
 /** PaidOrder summary before the buyer is sent to the payment page. */
 export default function BuyScreen() {
@@ -18,6 +21,9 @@ export default function BuyScreen() {
   const canPickup = !!listing && listing.pickup;
   const [choice, setChoice] = useState<'shipping' | 'pickup' | null>(null);
   const [busy, setBusy] = useState(false);
+  const picked = useDestination().country;
+  const [editCountry, setEditCountry] = useState(false);
+  const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
 
   if (!listing || (listing.status ?? 'active') !== 'active') {
@@ -45,11 +51,16 @@ export default function BuyScreen() {
     );
   }
 
-  const delivery = choice ?? (canShip ? 'shipping' : 'pickup');
+  // Delivery is priced for one country: the buyer's chosen one, or the seller's own until they choose.
+  const shipCountry = picked ?? listing.country;
+  const shipPrice = shippingTo(listing, shipCountry);
+  const delivery = choice ?? (canShip && (shipPrice !== null || !canPickup) ? 'shipping' : 'pickup');
+  const blocked = delivery === 'shipping' && shipPrice === null;
+  const choices = COUNTRIES.filter((code) => normalize(countryName(code)).includes(normalize(filter))).slice(0, filter.trim() ? 12 : 8);
   // The server decides the final price the same way: the listing price or the latest accepted offer.
   const accepted = [...(threadForListing(listing.id)?.messages ?? [])].reverse().find((m) => m.kind === 'offer' && m.status === 'accepted');
   const price = accepted?.amount != null ? Math.min(accepted.amount, listing.price) : listing.price;
-  const shipping = delivery === 'shipping' ? listing.shipping ?? 0 : 0;
+  const shipping = delivery === 'shipping' ? shipPrice ?? 0 : 0;
   const fee = buyerFee(price + shipping);
   const total = Math.round((price + shipping + fee + ADMIN_FEE) * 100) / 100;
   const seller = userById(listing.sellerId);
@@ -57,14 +68,14 @@ export default function BuyScreen() {
   const start = async () => {
     setBusy(true);
     setError('');
-    const answer = await buy(listing.id, delivery);
+    const answer = await buy(listing.id, delivery, delivery === 'shipping' ? shipCountry : undefined);
     if (answer.url) return openExternal(answer.url);
     setBusy(false);
     setError(answer.error ?? 'Nepavyko pradėti mokėjimo.');
   };
 
   return (
-    <Page footer={<Button label={busy ? 'Atidaromas mokėjimas…' : `Mokėti ${money(total)}`} disabled={busy} onPress={start} />}>
+    <Page footer={<Button label={blocked ? 'Siuntimui apmokėti reikia kainos' : busy ? 'Atidaromas mokėjimas…' : `Mokėti ${money(total)}`} disabled={busy || blocked} onPress={start} />}>
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
       <Muted>Pardavėjas: {seller.name}</Muted>
 
@@ -72,15 +83,50 @@ export default function BuyScreen() {
         <Card>
           <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Kaip gausite dalį?</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Chip label={`Pristatymas · ${money(listing.shipping ?? 0)}`} selected={delivery === 'shipping'} onPress={() => setChoice('shipping')} />
+            <Chip label={shipPrice === null ? 'Pristatymas' : `Pristatymas · ${money(shipPrice)}`} selected={delivery === 'shipping'} onPress={() => setChoice('shipping')} />
             <Chip label={`Atsiimsiu pats · ${listing.city}`} selected={delivery === 'pickup'} onPress={() => setChoice('pickup')} />
           </View>
         </Card>
       ) : null}
 
+      {delivery === 'shipping' ? (
+        <Card>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, color: colors.muted }}>Kur siųsti?</Text>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{countryLabel(shipCountry)}</Text>
+            </View>
+            <Button label={editCountry ? 'Gerai' : 'Keisti'} kind="outline" onPress={() => setEditCountry((v) => !v)} />
+          </View>
+          {editCountry ? (
+            <>
+              <TextInput
+                accessibilityLabel="Gavėjo šalis"
+                placeholder="Ieškoti šalies"
+                placeholderTextColor={colors.muted}
+                value={filter}
+                onChangeText={setFilter}
+                style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
+              />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {choices.map((code) => (
+                  <Chip key={code} label={countryLabel(code)} selected={shipCountry === code} onPress={() => { setDestination(code); setEditCountry(false); setFilter(''); }} />
+                ))}
+              </View>
+            </>
+          ) : null}
+          {blocked ? (
+            <>
+              <Notice tone="warn">Pardavėjas nenurodė siuntimo kainos į šią šalį, todėl apmokėti siuntimo dar negalima. Paklauskite kainos – sutarus pardavėjas ją įrašys skelbime.</Notice>
+              <Button label="Klausti siuntimo kainos skelbime" kind="outline" onPress={() => router.replace(`/listing/${listing.id}`)} />
+            </>
+          ) : null}
+        </Card>
+      ) : null}
+
       <Card style={{ gap: 0 }}>
         <Row label={accepted ? 'Sutarta kaina' : 'Kaina'} value={`${money(price)} ${listing.vat ? 'su PVM' : 'be PVM'}`} />
-        <Row label={delivery === 'shipping' ? 'Pristatymas' : 'Atsiėmimas'} value={delivery === 'shipping' ? money(shipping) : `${listing.city}, nemokamai`} />
+        <Row label={delivery === 'shipping' ? 'Pristatymas' : 'Atsiėmimas'} value={delivery === 'shipping' ? (blocked ? '–' : money(shipping)) : `${listing.city}, nemokamai`} />
         <Row label="Pirkėjo apsauga" value={money(fee)} />
         <Row label="Administravimo mokestis" value={money(ADMIN_FEE)} />
         <Row label="Iš viso" value={money(total)} strong />

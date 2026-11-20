@@ -9,6 +9,7 @@ import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/co
 import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
+import { tr } from '@/i18n';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 import { Text } from '@/components/Text';
 
@@ -69,6 +70,7 @@ export default function ListingScreen() {
     router.push(`/chat/${opened.id}`);
   };
   const abroad = !!dest && dest !== listing.country;
+  const abroadPrice = abroad ? listing.shippingAbroad ?? null : null;
 
   const sendReport = async () => {
     if (live && !registered) return router.push('/register');
@@ -218,7 +220,8 @@ export default function ListingScreen() {
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
-        {!mine && (listing.shippingQuote || (abroad && listing.shipping !== null)) ? (
+        {abroad && listing.shipping !== null && abroadPrice !== null ? <Row label={`${tr('Siuntimas į')} ${countryName(dest ?? '')}`} value={money(abroadPrice)} /> : null}
+        {!mine && (listing.shippingQuote || (abroad && listing.shipping !== null && abroadPrice === null)) ? (
           <>
             {abroad && listing.shipping !== null ? <Muted>Nurodyta siuntimo kaina galioja pardavėjo šalyje. Siuntimo į jūsų šalį kainos teiraukitės pardavėjo.</Muted> : null}
             <Button label="Klausti siuntimo kainos" kind="outline" onPress={askShipping} />
