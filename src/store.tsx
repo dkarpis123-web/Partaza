@@ -542,6 +542,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { id: thread.id };
     };
 
+    // Asks the server to e-mail the other person "you have a new message". Best effort: the
+    // server decides whether to send (throttled, respects blocks, off until mail is configured).
+    const notify = (threadId: string) => {
+      if (!supabase) return;
+      supabase.functions.invoke('notify-message', { body: { thread_id: threadId } }).catch(() => {});
+    };
+
     const sendText: Store['sendText'] = async (threadId, text) => {
       const { me } = stateRef.current;
       if (!supabase) {
@@ -550,6 +557,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       const { error } = await supabase.from('messages').insert({ thread_id: threadId, sender_id: me.id, kind: 'text', body: text });
       if (error) return explain(error);
+      notify(threadId);
       await refresh();
       return null;
     };
@@ -559,6 +567,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (supabase) {
         const { error } = await supabase.rpc('send_offer', { p_thread: threadId, p_amount: amount, p_body: text || null });
         if (error) return explain(error);
+        notify(threadId);
         await refresh();
         return null;
       }
@@ -586,6 +595,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (supabase) {
         const { error } = await supabase.rpc('answer_offer', { p_message: messageId, p_status: status });
         if (error) return explain(error);
+        notify(threadId);
         await refresh();
         return null;
       }

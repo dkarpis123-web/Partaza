@@ -534,3 +534,16 @@ end;
 $$;
 revoke all on function public.send_offer(uuid, numeric, text) from public, anon;
 grant execute on function public.send_offer(uuid, numeric, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 0.6: pranešimų el. paštu apie naują žinutę žurnalas (naudoja tik serverio funkcija)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.notification_log (
+  thread_id uuid not null references public.threads (id) on delete cascade,
+  recipient_id uuid not null references public.profiles (id) on delete cascade,
+  sent_at timestamptz not null default now(),
+  primary key (thread_id, recipient_id)
+);
+alter table public.notification_log enable row level security;
+revoke all on public.notification_log from anon, authenticated;
