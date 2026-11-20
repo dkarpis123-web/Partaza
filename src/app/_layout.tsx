@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 
 import { AuthLinkHandler } from '@/components/AuthLinkHandler';
+import { BackButton } from '@/components/BackButton';
 import { Splash } from '@/components/Splash';
 import { StoreProvider } from '@/store';
 import { colors } from '@/theme';
@@ -17,7 +18,8 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: colors.surface },
           headerTitleStyle: { fontWeight: '700' },
           contentStyle: { backgroundColor: colors.bg },
-          headerBackTitle: 'Atgal',
+          headerBackVisible: false,
+          headerLeft: () => <BackButton />,
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="listing/[id]" options={{ title: 'Skelbimas' }} />
