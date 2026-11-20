@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
-import { Button, Muted, Notice } from '@/components/ui';
+import { Button, Chip, Muted, Notice } from '@/components/ui';
 import { tr } from '@/i18n';
 import { type ShippingEstimate as Estimate } from '@/services/ai';
 import { countryName } from '@/services/geo';
@@ -10,7 +10,7 @@ import { useStore } from '@/store';
 import { money } from '@/theme';
 
 /** "AI: rough shipping price" – looks up the part's weight and size and carrier prices between two countries. */
-export function ShippingEstimate({ title, oem, fits, from, to, onUse }: { title: string; oem: string; fits: string; from: string; to: string; onUse?: (price: number) => void }) {
+export function ShippingEstimate({ title, oem, fits, from, to, current, onUse }: { title: string; oem: string; fits: string; from: string; to: string; current?: number | null; onUse?: (price: number) => void }) {
   const { aiShipping, registered } = useStore();
   const [busy, setBusy] = useState(false);
   const [asked, setAsked] = useState('');
@@ -42,7 +42,13 @@ export function ShippingEstimate({ title, oem, fits, from, to, onUse }: { title:
           <Notice>
             {`${tr('Preliminari siuntimo kaina')}: ${money(shown.low ?? 0)}–${money(shown.high ?? 0)}.${shown.weightKg ? ` ${tr('Svoris apie')} ${shown.weightKg} kg.` : ''}${shown.size ? ` ${tr('Pakuotė apie')} ${shown.size} cm.` : ''} ${shown.note}`}
           </Notice>
-          {onUse ? <Button label={`${tr('Naudoti')} ${money(middle)}`} kind="outline" onPress={() => onUse(middle)} /> : null}
+          {onUse ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {[shown.low ?? 0, middle, shown.high ?? 0].filter((v, i, all) => v > 0 && all.indexOf(v) === i).map((v) => (
+                <Chip key={v} label={current === v ? `${tr('Pritaikyta')}: ${money(v)}` : `${tr('Naudoti')} ${money(v)}`} selected={current === v} onPress={() => onUse(v)} />
+              ))}
+            </View>
+          ) : null}
           {shown.sources.map((s) => (
             <Button key={s.url} label={s.title} kind="quiet" onPress={() => openExternal(s.url)} />
           ))}

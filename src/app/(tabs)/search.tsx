@@ -56,6 +56,7 @@ export default function SearchScreen() {
   const [vinText, setVinText] = useState('');
   const [makeText, setMakeText] = useState('');
   const [modelText, setModelText] = useState('');
+  const [yearText, setYearText] = useState('');
   const [carError, setCarError] = useState('');
   const vinInfo = readVin(vinText);
 
@@ -65,7 +66,8 @@ export default function SearchScreen() {
     if (!make) return setCarError('Įrašykite markę, pvz., Volkswagen.');
     // A model read from the VIN (e.g. "Passat B6 / B7") is narrowed to its name so it matches sellers' wording.
     const guessed = modelSearchTerm(vinInfo);
-    setMyCar({ make, model: modelText.trim() || guessed, vin: vinInfo?.vin ?? '', year: vinInfo?.year ?? null });
+    const year = /^(19|20)\d\d$/.test(yearText.trim()) ? Number(yearText.trim()) : vinInfo?.year ?? null;
+    setMyCar({ make, model: modelText.trim() || guessed, vin: vinInfo?.vin ?? '', year });
     setOnlyMyCar(true);
     setEditCar(false);
     setCarError('');
@@ -205,7 +207,7 @@ export default function SearchScreen() {
       ) : null}
       {myCar && !editCar ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <Chip label={`Tinka: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}`} selected={onlyMyCar} onPress={() => setOnlyMyCar((v) => !v)} />
+          <Chip label={`Tinka: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}${myCar.year ? ` ${myCar.year}` : ''}`} selected={onlyMyCar} onPress={() => setOnlyMyCar((v) => !v)} />
           <Button
             label="Keisti automobilį"
             kind="quiet"
@@ -213,6 +215,7 @@ export default function SearchScreen() {
               setVinText(myCar.vin);
               setMakeText(myCar.make);
               setModelText(myCar.model);
+              setYearText(myCar.year ? String(myCar.year) : '');
               setEditCar(true);
             }}
           />
@@ -229,6 +232,7 @@ export default function SearchScreen() {
           ) : null}
           <Field label="Markė" value={makeText || vinInfo?.make || ''} onChangeText={(t) => { setMakeText(t); setCarError(''); }} placeholder="Pvz., Volkswagen" />
           <Field label="Modelis" value={modelText} onChangeText={setModelText} placeholder={modelSearchTerm(vinInfo) || 'Pvz., Transporter'} />
+          <Field label="Metai (nebūtina)" value={yearText || (vinInfo?.year ? String(vinInfo.year) : '')} onChangeText={(t) => setYearText(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="Pvz., 2016" />
           <Muted>Arba pasirinkite iš sąrašo:</Muted>
           <CarPicker
             picked={[`${makeText} ${modelText}`.trim()]}

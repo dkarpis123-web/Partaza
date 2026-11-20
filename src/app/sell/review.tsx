@@ -195,6 +195,12 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   }, [initialPhotos, editing, whole, live, registered, ready]);
 
   const fitsList = fits.split(',').map((f) => f.trim()).filter(Boolean);
+  // Production years of the vehicle the part fits: added to the "fits" text as "2015–2018".
+  const [yearFrom, setYearFrom] = useState('');
+  const [yearTo, setYearTo] = useState('');
+  const validYear = (t: string) => /^(19|20)\d\d$/.test(t.trim());
+  const yearsText = validYear(yearFrom) ? (validYear(yearTo) && yearTo.trim() !== yearFrom.trim() ? `${yearFrom.trim()}–${yearTo.trim()}` : yearFrom.trim()) : '';
+  const lastHasYear = fitsList.length > 0 && /(19|20)\d\d/.test(fitsList[fitsList.length - 1]);
   const advice = useMemo(() => priceAdviceFromMarket(oem, editing ? listings.filter((l) => l.id !== editing.id) : listings, defects.length > 0), [oem, listings, defects.length, editing]);
   const price = parsePrice(priceText);
 
@@ -286,6 +292,22 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Field label="Pavadinimas" value={title} onChangeText={setTitle} />
         <Field label="Dalies (OEM) numeris" value={oem} onChangeText={setOem} hint="Pagal numerį pirkėjai ras dalį ir matysime panašių dalių kainas." />
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Field label="Metai nuo (nebūtina)" value={yearFrom} onChangeText={(t) => setYearFrom(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="2015" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field label="Metai iki" value={yearTo} onChangeText={(t) => setYearTo(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="2018" />
+          </View>
+        </View>
+        {yearsText && fitsList.length > 0 && !lastHasYear ? (
+          <Button
+            label={`${tr('Pridėti metus prie')} „${fitsList[fitsList.length - 1]}“: ${yearsText}`}
+            kind="outline"
+            onPress={() => setFits([...fitsList.slice(0, -1), `${fitsList[fitsList.length - 1]} ${yearsText}`].join(', '))}
+          />
+        ) : null}
+        <Muted>Įrašę metus ir tada pasirinkę modelį iš sąrašo, metus pridėsime automatiškai.</Muted>
         <Chip label={pickCar ? 'Slėpti markių sąrašą' : 'Pasirinkti markę ir modelį iš sąrašo'} selected={pickCar} onPress={() => setPickCar((v) => !v)} />
         {pickCar ? (
           <CarPicker
@@ -293,7 +315,9 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             picked={fitsList}
             onPick={(make, model) => {
               const item = `${make} ${model}`.trim();
-              setFits(fitsList.includes(item) ? fitsList.filter((f) => f !== item).join(', ') : [...fitsList, item].join(', '));
+              // Picking a car again removes it, with or without years after its name.
+              const already = fitsList.filter((f) => f === item || f.startsWith(`${item} `));
+              setFits(already.length > 0 ? fitsList.filter((f) => !already.includes(f)).join(', ') : [...fitsList, yearsText ? `${item} ${yearsText}` : item].join(', '));
             }}
           />
         ) : null}
@@ -422,7 +446,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
                 <Chip key={s.label} label={s.label} selected={parsePrice(shipText) === s.price} onPress={() => setShipText(toText(s.price))} />
               ))}
             </View>
-            {live && (title.trim() || oem.trim()) ? <ShippingEstimate title={title.trim()} oem={oem.trim()} fits={fits.trim()} from={country} to={country} onUse={(p) => setShipText(toText(p))} /> : null}
+            {live && (title.trim() || oem.trim()) ? <ShippingEstimate title={title.trim()} oem={oem.trim()} fits={fits.trim()} from={country} to={country} current={parsePrice(shipText)} onUse={(p) => setShipText(toText(p))} /> : null}
             <Field label="Siuntimo kaina į kitas ES šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
             <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas.</Notice>
           </>
