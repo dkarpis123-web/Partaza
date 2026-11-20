@@ -66,7 +66,7 @@ export function AiReview({ listing }: { listing: Listing }) {
     return (
       <View style={{ gap: 8 }}>
         <Button label={busy ? 'DI peržiūri skelbimą…' : 'DI peržiūra: pataisyti skelbimą pagal nuotraukas'} disabled={busy} onPress={ask} />
-        {busy ? <Muted>DI skaito tekstą ir žiūri nuotraukas. Tai užtrunka keliolika sekundžių. Niekas nekeičiama be jūsų patvirtinimo.</Muted> : null}
+        {busy ? <Muted>DI skaito tekstą ir žiūri nuotraukas. Pagal dalies numerį ieškoma, kam ji tinka, todėl tai gali užtrukti iki minutės. Niekas nekeičiama be jūsų patvirtinimo.</Muted> : null}
         {done ? <Notice>Pakeitimai išsaugoti.</Notice> : null}
         {problem ? <Notice tone="warn">{problem}</Notice> : null}
         <Button label={priceBusy ? 'Ieškoma kainų internete…' : 'DI kainos patarimas: ieškoti kainų internete'} kind="outline" disabled={priceBusy} onPress={askPrices} />

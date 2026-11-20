@@ -71,6 +71,45 @@ function toolInput(result: Json, name: string): Json {
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const language = (lang: unknown) => (lang === 'en' ? 'English' : 'Lithuanian');
 
+/** Looks a part number up on the web and returns the vehicles the part fits ('' if nothing reliable was found). */
+async function fitsByNumber(oem: string, title: string, lang: unknown): Promise<string> {
+  if (oem.replace(/[^A-Za-z0-9]/g, '').length < 5) return '';
+  try {
+    const result = await claude({
+      model: SEARCH_MODEL,
+      max_tokens: 2000,
+      tools: [
+        { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
+        {
+          name: 'report_fitment',
+          description: 'Reports which vehicles the part with this number fits. Call it once, after searching.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              found: { type: 'boolean', description: 'true only if the search results clearly show this exact part number and its vehicles.' },
+              fits: { type: 'string', description: 'Makes, models and generations/years the part fits, comma-separated, most common first, at most 300 characters, e.g. "BMW 3 (F30) 2012-2019, BMW 4 (F32)". Empty if not found.' },
+            },
+            required: ['found', 'fits'],
+          },
+        },
+      ],
+      messages: [{
+        role: 'user',
+        content:
+          `Vehicle part number: ${oem}\nPart: ${title || '(unknown)'}\n\n` +
+          `Search the web for this exact part number and find which vehicle makes, models and generations it fits (parts catalogues and shops list this). ` +
+          `Then call the report_fitment tool exactly once (do not answer in plain text). Write model names as they are commonly written; any words in ${language(lang)}. ` +
+          `If the results are about a different number or disagree with each other, set found to false rather than guess.`,
+      }],
+    });
+    const found = toolInput(result, 'report_fitment');
+    return found.found === true ? text(found.fits, 300) : '';
+  } catch (error) {
+    console.error('ai: fitment lookup failed', (error as Error).message);
+    return '';
+  }
+}
+
 async function recognize(body: Json): Promise<Json> {
   const photos = (Array.isArray(body.photos) ? body.photos : [])
     .filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u))
@@ -104,10 +143,12 @@ async function recognize(body: Json): Promise<Json> {
     }],
   });
   const found = toolInput(result, 'describe_part');
+  // With a readable part number, the vehicles are looked up by that number rather than guessed from the photo.
+  const byNumber = await fitsByNumber(text(found.oem, 60), text(found.title, 120), body.lang);
   return {
     title: text(found.title, 120),
     oem: text(found.oem, 60),
-    fits: text(found.fits, 200),
+    fits: byNumber || text(found.fits, 200),
     vehicle_type: VEHICLE_TYPES.includes(found.vehicle_type) ? found.vehicle_type : 'car',
     defects: (Array.isArray(found.defects) ? found.defects : []).map((d: unknown) => text(d, 120)).filter(Boolean).slice(0, 6),
   };
@@ -283,12 +324,16 @@ async function improve(body: Json, admin: any, userId: string): Promise<Json> {
   });
   const found = toolInput(result, 'propose_listing');
   if (!text(found.title, 120)) return { error: 'ai_error' };
+  const notes = (Array.isArray(found.notes) ? found.notes : []).map((n: unknown) => text(n, 240)).filter(Boolean).slice(0, 6);
+  // The part number decides the fit: vehicles found for it on the web replace the seller's list.
+  const byNumber = await fitsByNumber(text(found.oem, 60), text(found.title, 120), body.lang);
+  if (byNumber) notes.push(body.lang === 'en' ? 'Fitment was chosen by the part number from public sources – please check it.' : 'Tinkamumas parinktas pagal dalies numerį iš viešų šaltinių – patikrinkite.');
   return {
     title: text(found.title, 120),
     description: text(found.description, 3000),
     oem: text(found.oem, 60),
-    fits: text(found.fits, 400),
-    notes: (Array.isArray(found.notes) ? found.notes : []).map((n: unknown) => text(n, 240)).filter(Boolean).slice(0, 6),
+    fits: byNumber || text(found.fits, 400),
+    notes,
   };
 }
 

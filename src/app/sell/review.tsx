@@ -252,7 +252,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         {live && !whole && photos.length > 0 ? (
           <Button label={againBusy ? 'DI žiūri į nuotraukas…' : proposal ? 'DI: persvarstyti dar kartą' : 'DI: atpažinti iš naujo pagal nuotraukas'} kind="outline" disabled={againBusy} onPress={lookAgain} />
         ) : null}
-        {againBusy ? <Muted>DI skaito numerius ir užrašus nuotraukose. Tai užtrunka keliolika sekundžių. Laukai nekeičiami be jūsų patvirtinimo.</Muted> : null}
+        {againBusy ? <Muted>DI skaito numerius ir užrašus nuotraukose. Pagal dalies numerį ieškoma, kam ji tinka, todėl tai gali užtrukti iki minutės. Laukai nekeičiami be jūsų patvirtinimo.</Muted> : null}
         {againProblem ? <Notice tone="warn">{againProblem}</Notice> : null}
         {proposal ? (
           <View style={{ gap: 6, padding: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 10 }}>
