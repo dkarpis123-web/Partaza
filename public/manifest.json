@@ -1,0 +1,32 @@
+{
+  "name": "Partaza – transporto dalių rinka",
+  "short_name": "Partaza",
+  "description": "Naujos ir naudotos dalys automobiliams, motociklams, sunkvežimiams, laivams ir kitam transportui.",
+  "lang": "lt",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#15181C",
+  "background_color": "#15181C",
+  "icons": [
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ]
+}

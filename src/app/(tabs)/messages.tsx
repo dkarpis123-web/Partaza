@@ -1,3 +1,4 @@
+import { BlockedUsers } from '@/components/BlockedUsers';
 import { Link } from 'expo-router';
 import React from 'react';
 import { Pressable, Text } from 'react-native';
@@ -11,6 +12,7 @@ export default function MessagesScreen() {
   return (
     <Page>
       <Heading>Žinutės ir derybos</Heading>
+      <BlockedUsers />
       {threads.length === 0 ? (
         <Muted>Pokalbių dar nėra. Atidarykite skelbimą ir parašykite pardavėjui arba pasiūlykite savo kainą.</Muted>
       ) : null}
