@@ -301,7 +301,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Payments: who can be paid through the platform (public), and my own orders.
     const [readyRes, ordersRes] = await Promise.all([
       supabase.from('seller_accounts').select('seller_id').eq('payouts_ready', true),
-      uid ? supabase.from('orders').select('*').neq('status', 'cancelled').order('created_at', { ascending: false }) : Promise.resolve({ data: [] as Row[] }),
+      uid ? supabase.from('payment_orders').select('*').neq('status', 'cancelled').order('created_at', { ascending: false }) : Promise.resolve({ data: [] as Row[] }),
     ]);
     const payReady = (readyRes.data ?? []).map((r: Row) => r.seller_id as string);
     const orders = ((ordersRes as { data: Row[] | null }).data ?? []).map(toOrder);
@@ -345,7 +345,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
         refresh();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_orders' }, () => {
         refresh();
       })
       .subscribe();

@@ -140,7 +140,7 @@ async function markPaid(admin: SupabaseClient, session: Json): Promise<void> {
   const intentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
   if (!intentId) return;
 
-  const { data: order } = await admin.from('orders').select('*').eq('id', orderId).maybeSingle();
+  const { data: order } = await admin.from('payment_orders').select('*').eq('id', orderId).maybeSingle();
   if (!order) return;
   if (order.status === 'cancelled') {
     // Paid after the order was cancelled (two tabs racing): give the money straight back.
@@ -160,7 +160,7 @@ async function markPaid(admin: SupabaseClient, session: Json): Promise<void> {
   const shipTo = shipping || phone ? { name: shipping?.name ?? session.customer_details?.name ?? null, phone, address: shipping?.address ?? null } : null;
 
   const { data: paid } = await admin
-    .from('orders')
+    .from('payment_orders')
     .update({ status: 'paid', paid_at: new Date().toISOString(), stripe_payment_intent_id: intentId, stripe_charge_id: charge, ship_to: shipTo })
     .eq('id', orderId)
     .eq('status', 'pending')
@@ -177,7 +177,7 @@ async function markPaid(admin: SupabaseClient, session: Json): Promise<void> {
 async function settlePending(admin: SupabaseClient, order: Json, cancelIfOpen: boolean): Promise<void> {
   if (order.status !== 'pending') return;
   if (!order.stripe_session_id) {
-    await admin.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
+    await admin.from('payment_orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
     return;
   }
   let session = await stripe('GET', `checkout/sessions/${order.stripe_session_id}`);
@@ -186,7 +186,7 @@ async function settlePending(admin: SupabaseClient, order: Json, cancelIfOpen: b
   }
   if (session.payment_status === 'paid') return markPaid(admin, session);
   if (session.status === 'expired') {
-    await admin.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
+    await admin.from('payment_orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
   }
 }
 
@@ -214,7 +214,7 @@ async function release(admin: SupabaseClient, order: Json): Promise<string | nul
     `release-${order.id}`,
   );
   await admin
-    .from('orders')
+    .from('payment_orders')
     .update({ status: 'completed', completed_at: new Date().toISOString(), release_at: null, stripe_transfer_id: transfer.id, stripe_charge_id: charge })
     .eq('id', order.id)
     .in('status', ['shipped', 'received']);
@@ -223,14 +223,14 @@ async function release(admin: SupabaseClient, order: Json): Promise<string | nul
 
 async function refund(admin: SupabaseClient, order: Json): Promise<void> {
   await stripe('POST', 'refunds', { payment_intent: order.stripe_payment_intent_id, metadata: { order_id: order.id } }, `refund-${order.id}`);
-  await admin.from('orders').update({ status: 'refunded', release_at: null }).eq('id', order.id);
+  await admin.from('payment_orders').update({ status: 'refunded', release_at: null }).eq('id', order.id);
   await reopenListing(admin, order);
 }
 
 async function releaseDue(admin: SupabaseClient): Promise<Response> {
   if (!STRIPE_KEY) return reply({ skipped: 'not_configured' });
   const { data: due } = await admin
-    .from('orders')
+    .from('payment_orders')
     .select('*')
     .in('status', ['shipped', 'received'])
     .lte('release_at', new Date().toISOString())
@@ -263,16 +263,16 @@ async function webhook(admin: SupabaseClient, payload: string, signature: string
       case 'checkout.session.expired':
       case 'checkout.session.async_payment_failed': {
         const orderId = object.metadata?.order_id;
-        if (isUuid(orderId)) await admin.from('orders').update({ status: 'cancelled' }).eq('id', orderId).eq('status', 'pending');
+        if (isUuid(orderId)) await admin.from('payment_orders').update({ status: 'cancelled' }).eq('id', orderId).eq('status', 'pending');
         break;
       }
       case 'charge.refunded': {
         // A full refund made in the Stripe dashboard (e.g. after a dispute was decided for the buyer).
         const intentId = typeof object.payment_intent === 'string' ? object.payment_intent : null;
         if (!object.refunded || !intentId) break;
-        const { data: order } = await admin.from('orders').select('*').eq('stripe_payment_intent_id', intentId).maybeSingle();
+        const { data: order } = await admin.from('payment_orders').select('*').eq('stripe_payment_intent_id', intentId).maybeSingle();
         if (order && ['paid', 'shipped', 'received', 'disputed'].includes(order.status)) {
-          await admin.from('orders').update({ status: 'refunded', release_at: null }).eq('id', order.id);
+          await admin.from('payment_orders').update({ status: 'refunded', release_at: null }).eq('id', order.id);
           await reopenListing(admin, order);
         }
         break;
@@ -386,7 +386,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   if (total < 50) return { error: 'amount_too_small' };
 
   // Clear earlier unfinished attempts: the buyer's own are cancelled, other people's only if stale.
-  const { data: pending } = await admin.from('orders').select('*').eq('listing_id', listingId).eq('status', 'pending');
+  const { data: pending } = await admin.from('payment_orders').select('*').eq('listing_id', listingId).eq('status', 'pending');
   for (const old of pending ?? []) {
     const own = old.buyer_id === user.id;
     const stale = Date.now() - new Date(old.created_at).getTime() > 32 * 60_000;
@@ -394,7 +394,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   }
 
   const { data: order, error } = await admin
-    .from('orders')
+    .from('payment_orders')
     .insert({
       listing_id: listingId, buyer_id: user.id, seller_id: listing.seller_id, title: listing.title,
       item_amount: item, shipping_amount: shipping, fee_amount: fee, total_amount: total, delivery,
@@ -427,22 +427,22 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
       },
       `checkout-${order.id}`,
     );
-    await admin.from('orders').update({ stripe_session_id: session.id }).eq('id', order.id);
+    await admin.from('payment_orders').update({ stripe_session_id: session.id }).eq('id', order.id);
     return { url: session.url, order_id: order.id };
   } catch (failure) {
-    await admin.from('orders').delete().eq('id', order.id);
+    await admin.from('payment_orders').delete().eq('id', order.id);
     throw failure;
   }
 }
 
 async function orderAction(admin: SupabaseClient, user: Json, body: Json): Promise<Json> {
   if (!isUuid(body.order_id)) return { error: 'bad_request' };
-  const { data: order } = await admin.from('orders').select('*').eq('id', body.order_id).maybeSingle();
+  const { data: order } = await admin.from('payment_orders').select('*').eq('id', body.order_id).maybeSingle();
   if (!order || (order.buyer_id !== user.id && order.seller_id !== user.id)) return { error: 'not_a_participant' };
   const buyer = order.buyer_id === user.id;
   const now = new Date().toISOString();
   const move = async (from: string[], changes: Json) => {
-    const { data } = await admin.from('orders').update(changes).eq('id', order.id).in('status', from).select('id');
+    const { data } = await admin.from('payment_orders').update(changes).eq('id', order.id).in('status', from).select('id');
     return data && data.length > 0 ? { ok: true } : { error: 'wrong_status' };
   };
 
@@ -467,7 +467,7 @@ async function orderAction(admin: SupabaseClient, user: Json, body: Json): Promi
       if (problem === null) return { ok: true };
       // The buyer has done their part; the timer retries the transfer.
       console.error('release delayed', order.id, problem);
-      await admin.from('orders').update({ release_at: now, received_at: order.received_at ?? now, status: 'received' }).eq('id', order.id).in('status', ['shipped', 'received']);
+      await admin.from('payment_orders').update({ release_at: now, received_at: order.received_at ?? now, status: 'received' }).eq('id', order.id).in('status', ['shipped', 'received']);
       return { ok: true, delayed: true };
     }
     case 'dispute': {
@@ -528,7 +528,7 @@ Deno.serve(async (req: Request) => {
         return reply(await checkout(admin, user, body, siteFor(req)));
       case 'sync_order': {
         if (!isUuid(body.order_id)) return reply({ error: 'bad_request' });
-        const { data: order } = await admin.from('orders').select('*').eq('id', body.order_id).maybeSingle();
+        const { data: order } = await admin.from('payment_orders').select('*').eq('id', body.order_id).maybeSingle();
         if (!order || (order.buyer_id !== user.id && order.seller_id !== user.id)) return reply({ error: 'not_a_participant' });
         await settlePending(admin, order, false);
         return reply({ ok: true });

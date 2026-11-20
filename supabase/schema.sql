@@ -593,7 +593,7 @@ grant select (seller_id, payouts_ready) on public.seller_accounts to anon, authe
 drop policy if exists seller_accounts_read on public.seller_accounts;
 create policy seller_accounts_read on public.seller_accounts for select using (true);
 
--- Užsakymas. Sumos centais. Būsenos:
+-- Per platformą apmokėtas užsakymas (lentelė „orders“ skirta susitarimams be mokėjimo). Sumos centais. Būsenos:
 --   pending   – pirkėjas nukreiptas apmokėti (dalis rezervuota, kol galioja apmokėjimo langas)
 --   paid      – apmokėta, pinigai laikomi; pardavėjas turi išsiųsti arba perduoti
 --   shipped   – pardavėjas pažymėjo „Išsiunčiau“ / „Perdaviau“
@@ -602,7 +602,7 @@ create policy seller_accounts_read on public.seller_accounts for select using (t
 --   disputed  – pirkėjas pranešė apie problemą; pinigai sulaikyti, kol išspręs administratorius
 --   refunded  – pinigai grąžinti pirkėjui
 --   cancelled – apmokėjimas neįvyko arba nutrauktas
-create table if not exists public.orders (
+create table if not exists public.payment_orders (
   id uuid primary key default gen_random_uuid(),
   listing_id uuid references public.listings (id) on delete set null,
   buyer_id uuid references public.profiles (id) on delete set null,
@@ -634,29 +634,29 @@ create table if not exists public.orders (
   completed_at timestamptz
 );
 
-create index if not exists orders_buyer_idx on public.orders (buyer_id, created_at desc);
-create index if not exists orders_seller_idx on public.orders (seller_id, created_at desc);
-create index if not exists orders_release_idx on public.orders (release_at) where status in ('shipped', 'received');
-create index if not exists orders_session_idx on public.orders (stripe_session_id);
-create index if not exists orders_intent_idx on public.orders (stripe_payment_intent_id);
+create index if not exists payment_orders_buyer_idx on public.payment_orders (buyer_id, created_at desc);
+create index if not exists payment_orders_seller_idx on public.payment_orders (seller_id, created_at desc);
+create index if not exists payment_orders_release_idx on public.payment_orders (release_at) where status in ('shipped', 'received');
+create index if not exists payment_orders_session_idx on public.payment_orders (stripe_session_id);
+create index if not exists payment_orders_intent_idx on public.payment_orders (stripe_payment_intent_id);
 -- Viena dalis – vienas galiojantis užsakymas: du pirkėjai negali apmokėti tos pačios dalies.
-create unique index if not exists orders_one_per_listing on public.orders (listing_id)
+create unique index if not exists payment_orders_one_per_listing on public.payment_orders (listing_id)
   where status not in ('cancelled', 'refunded');
 
-alter table public.orders enable row level security;
-revoke all on public.orders from anon, authenticated;
-grant select on public.orders to authenticated;
-drop policy if exists orders_read on public.orders;
-create policy orders_read on public.orders for select to authenticated
+alter table public.payment_orders enable row level security;
+revoke all on public.payment_orders from anon, authenticated;
+grant select on public.payment_orders to authenticated;
+drop policy if exists payment_orders_read on public.payment_orders;
+create policy payment_orders_read on public.payment_orders for select to authenticated
   using ((select auth.uid()) in (buyer_id, seller_id));
 
 do $$
 begin
   if not exists (
     select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'orders'
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'payment_orders'
   ) then
-    alter publication supabase_realtime add table public.orders;
+    alter publication supabase_realtime add table public.payment_orders;
   end if;
 end;
 $$;
@@ -673,7 +673,7 @@ begin
     raise exception 'not_authenticated';
   end if;
   if exists (
-    select 1 from public.orders o
+    select 1 from public.payment_orders o
     where (select auth.uid()) in (o.buyer_id, o.seller_id)
       and o.status in ('paid', 'shipped', 'received', 'disputed')
   ) then
