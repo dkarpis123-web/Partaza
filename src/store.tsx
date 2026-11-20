@@ -45,6 +45,7 @@ interface Store extends State {
   signOut: () => Result;
   setKind: (kind: SellerKind) => Result;
   addListing: (draft: ListingDraft) => Promise<{ id?: string; error?: string }>;
+  updateListing: (listingId: string, draft: ListingDraft) => Result;
   addDonor: (name: string, vin: string, cost: number) => Promise<{ id?: string; error?: string }>;
   markSold: (listingId: string, price: number) => Result;
   openThread: (listingId: string) => Promise<{ id?: string; error?: string }>;
@@ -396,6 +397,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { id: listing.id };
     };
 
+    const updateListing: Store['updateListing'] = async (listingId, draft) => {
+      const { me } = stateRef.current;
+      const uploaded = await uploadPhotos(draft.photos, me.id);
+      if (!uploaded.urls) return uploaded.error ?? 'Nepavyko įkelti nuotraukų.';
+      const urls = uploaded.urls;
+      if (supabase) {
+        const { error } = await supabase
+          .from('listings')
+          .update({
+            title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
+            oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
+            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic,
+          })
+          .eq('id', listingId);
+        if (error) return explain(error);
+        // Private figures; the sale price, if any, is left untouched.
+        await supabase
+          .from('listing_finance')
+          .upsert({ listing_id: listingId, seller_id: me.id, donor_id: draft.donorId ?? null, cost: draft.cost ?? null }, { onConflict: 'listing_id' });
+      }
+      setState((s) => ({
+        ...s,
+        listings: s.listings.map((l) => (l.id === listingId ? { ...l, ...draft, photos: urls, donorId: draft.donorId ?? null, cost: draft.cost ?? null } : l)),
+      }));
+      return null;
+    };
+
     const addDonor: Store['addDonor'] = async (name, vin, cost) => {
       const { me } = stateRef.current;
       if (!supabase) {
@@ -525,7 +553,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
   const value = useMemo<Store>(

@@ -88,7 +88,10 @@ export default function ListingScreen() {
 
       {mine && listing.status !== 'sold' ? (
         photoDraft === null ? (
-          <Button label="Keisti nuotraukas" kind="outline" onPress={() => setPhotoDraft(listing.photos)} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button label="Redaguoti skelbimą" kind="outline" onPress={() => router.push({ pathname: '/sell/review', params: { edit: listing.id } })} style={{ flex: 1 }} />
+            <Button label="Keisti nuotraukas" kind="outline" onPress={() => setPhotoDraft(listing.photos)} style={{ flex: 1 }} />
+          </View>
         ) : (
           <Card>
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Nuotraukos ({photoDraft.length})</Text>

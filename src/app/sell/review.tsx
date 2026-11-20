@@ -7,7 +7,7 @@ import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/compo
 import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
-import { CONDITION_LABELS, Condition, VEHICLE_LABELS, VehicleType } from '@/types';
+import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 const CONDITIONS = Object.keys(CONDITION_LABELS) as Condition[];
@@ -23,43 +23,66 @@ function parsePrice(text: string): number | null {
   return Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : null;
 }
 
+function toText(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
+}
+
+/** New listing (photos arrive from the Sell tab) or editing an existing one (?edit=<listing id>). */
 export default function ReviewScreen() {
+  const params = useLocalSearchParams<{ edit?: string }>();
+  const { listingById, ready, me } = useStore();
+  const editId = typeof params.edit === 'string' && params.edit ? params.edit : undefined;
+  const editing = editId ? listingById(editId) : undefined;
+  if (editId && (!editing || editing.sellerId !== me.id)) {
+    return (
+      <Page>
+        <Muted>{ready ? 'Šio skelbimo redaguoti negalima.' : 'Kraunama…'}</Muted>
+      </Page>
+    );
+  }
+  // The key gives the form a fresh start when switching between "new" and a listing being edited.
+  return <ReviewForm key={editId ?? 'new'} editing={editing} />;
+}
+
+function ReviewForm({ editing }: { editing?: Listing }) {
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; donor?: string }>();
-  const { listings, donors, registered, phone, addListing } = useStore();
-  const donor = donors.find((d) => d.id === params.donor);
+  const { listings, donors, registered, phone, addListing, updateListing } = useStore();
+  const donor = donors.find((d) => d.id === (editing ? editing.donorId : params.donor));
 
   const initialPhotos = useMemo<string[]>(() => {
+    if (editing) return editing.photos;
     try {
       const parsed = JSON.parse(params.photos ?? '[]');
       return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === 'string') : [];
     } catch {
       return [];
     }
-  }, [params.photos]);
+  }, [params.photos, editing]);
   // The seller can still add, remove or retake photos here before publishing.
   const [photos, setPhotos] = useState<string[]>(initialPhotos);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!editing);
   const [isDemo, setIsDemo] = useState(false);
-  const [title, setTitle] = useState('');
-  const [oem, setOem] = useState('');
-  const [fits, setFits] = useState('');
-  const [vehicleType, setVehicleType] = useState<VehicleType>('car');
-  const [condition, setCondition] = useState<Condition>('used');
-  const [defects, setDefects] = useState<string[]>([]);
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [oem, setOem] = useState(editing?.oem ?? '');
+  const [fits, setFits] = useState(editing?.fits ?? '');
+  const [vehicleType, setVehicleType] = useState<VehicleType>(editing?.vehicleType ?? 'car');
+  const [condition, setCondition] = useState<Condition>(editing?.condition ?? 'used');
+  const [defects, setDefects] = useState<string[]>(editing?.defects ?? []);
   const [newDefect, setNewDefect] = useState('');
-  const [priceText, setPriceText] = useState('');
-  const [vat, setVat] = useState(false);
-  const [shipping, setShipping] = useState<number | null>(3.5);
-  const [city, setCity] = useState('');
-  const [allowOffers, setAllowOffers] = useState(true);
-  const [classic, setClassic] = useState(false);
-  const [costText, setCostText] = useState('');
+  const [priceText, setPriceText] = useState(editing ? toText(editing.price) : '');
+  const [vat, setVat] = useState(editing?.vat ?? false);
+  const [shipping, setShipping] = useState<number | null>(editing ? editing.shipping : 3.5);
+  const [city, setCity] = useState(editing?.city ?? '');
+  const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
+  const [classic, setClassic] = useState(editing?.classic ?? false);
+  const [costText, setCostText] = useState(editing?.cost != null ? toText(editing.cost) : '');
   const [error, setError] = useState('');
   const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
+    if (editing) return; // An existing listing already has its fields.
     let active = true;
     recognizePart(initialPhotos).then((r) => {
       if (!active) return;
@@ -74,9 +97,9 @@ export default function ReviewScreen() {
     return () => {
       active = false;
     };
-  }, [initialPhotos]);
+  }, [initialPhotos, editing]);
 
-  const advice = useMemo(() => priceAdviceFromMarket(oem, listings, defects.length > 0), [oem, listings, defects.length]);
+  const advice = useMemo(() => priceAdviceFromMarket(oem, editing ? listings.filter((l) => l.id !== editing.id) : listings, defects.length > 0), [oem, listings, defects.length, editing]);
   const price = parsePrice(priceText);
 
   const publish = async () => {
@@ -93,6 +116,17 @@ export default function ReviewScreen() {
     }
     if (!phone) return setError('Profilyje įrašykite telefono numerį – be jo skelbimo įdėti negalima.');
     setPublishing(true);
+    const draft = {
+      title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
+      city: city.trim(), country: editing?.country ?? 'Lietuva', shipping, pickup: true, photos, allowOffers,
+      classic, donorId: donor ? donor.id : null, cost: donor ? null : cost,
+    };
+    if (editing) {
+      const problem = await updateListing(editing.id, draft);
+      setPublishing(false);
+      if (problem) return setError(problem);
+      return router.back();
+    }
     const result = await addListing({
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country: 'Lietuva', shipping, pickup: true, photos, allowOffers,
@@ -113,11 +147,11 @@ export default function ReviewScreen() {
   }
 
   return (
-    <Page footer={<Button label={publishing ? 'Skelbiama…' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} />}>
+    <Page footer={<Button label={publishing ? 'Saugoma…' : editing ? 'Išsaugoti pakeitimus' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} />}>
       {isDemo ? (
         <Notice tone="warn">Bandomoji versija: dalies atpažinimas dar neprijungtas, todėl laukai užpildyti pavyzdžiu. Pataisykite juos pagal savo dalį.</Notice>
       ) : (
-        <Muted>Užpildėme pagal jūsų nuotraukas. Peržiūrėkite ir pataisykite, jei ką supratome ne taip.</Muted>
+        <Muted>{editing ? 'Keičiate paskelbtą skelbimą. Pakeitimus pirkėjai pamatys iškart.' : 'Užpildėme pagal jūsų nuotraukas. Peržiūrėkite ir pataisykite, jei ką supratome ne taip.'}</Muted>
       )}
 
       <Card>
