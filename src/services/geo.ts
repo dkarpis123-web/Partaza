@@ -145,3 +145,8 @@ export function setDestination(code: string | null) {
   destListeners.forEach((l) => l());
   (code ? AsyncStorage.setItem(DEST_KEY, code) : AsyncStorage.removeItem(DEST_KEY)).catch(() => {});
 }
+
+const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
+/** True when a parcel between these countries leaves or enters the EU, so customs and import taxes may apply. */
+export const crossesEuBorder = (from: string, to: string | null) => !EU.includes(from) || (!!to && !EU.includes(to));
+export const CUSTOMS_NOTE = 'Siunčiant ne į Europos Sąjungą arba ne iš jos, gali būti taikomi muito, importo PVM ir kiti mokesčiai. Juos moka gavėjas, jei su pardavėju nesutarta kitaip.';

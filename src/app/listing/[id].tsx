@@ -6,12 +6,13 @@ import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
-import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
+import { CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, useDestination, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { tr } from '@/i18n';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 import { Text } from '@/components/Text';
+import { AiReview } from '@/components/AiReview';
 
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -189,6 +190,8 @@ export default function ListingScreen() {
         )
       ) : null}
 
+      {mine && live && status === 'active' && photoDraft === null ? <AiReview listing={listing} /> : null}
+
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
       {mine ? null : (
         <Button
@@ -221,6 +224,7 @@ export default function ListingScreen() {
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
         {abroad && listing.shipping !== null && abroadPrice !== null ? <Row label={`${tr('Siuntimas į')} ${countryName(dest ?? '')}`} value={money(abroadPrice)} /> : null}
+        {(listing.shipping !== null || listing.shippingQuote) && crossesEuBorder(listing.country, dest) ? <Muted>{CUSTOMS_NOTE}</Muted> : null}
         {!mine && (listing.shippingQuote || (abroad && listing.shipping !== null && abroadPrice === null)) ? (
           <>
             {abroad && listing.shipping !== null ? <Muted>Nurodyta siuntimo kaina galioja pardavėjo šalyje. Siuntimo į jūsų šalį kainos teiraukitės pardavėjo.</Muted> : null}

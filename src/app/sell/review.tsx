@@ -6,7 +6,7 @@ import { CarPicker } from '@/components/CarPicker';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
-import { COUNTRIES, countryLabel, countryName, detectCountry, useGeo } from '@/services/geo';
+import { COUNTRIES, CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, detectCountry, useGeo } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -370,6 +370,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas.</Notice>
           </>
         ) : null}
+        {shipMode !== 'pickup' ? <Muted>{crossesEuBorder(country, null) ? CUSTOMS_NOTE : 'Siunčiant ne į Europos Sąjungą, gali būti taikomi muito, importo PVM ir kiti mokesčiai.'}</Muted> : null}
         {shipMode === 'quote' ? <Muted>Pirkėjas matys mygtuką „Klausti siuntimo kainos“ ir parašys jums žinutę su savo šalimi ir miestu.</Muted> : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ flex: 1 }}>

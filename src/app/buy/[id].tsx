@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import { Button, Card, Chip, Muted, Notice, Page, Row } from '@/components/ui';
-import { COUNTRIES, countryLabel, countryName, setDestination, useDestination } from '@/services/geo';
+import { COUNTRIES, CUSTOMS_NOTE, crossesEuBorder, countryLabel, countryName, setDestination, useDestination } from '@/services/geo';
 import { normalize } from '@/services/match';
 import { openExternal } from '@/services/open';
 import { shippingTo } from '@/services/shipping';
@@ -115,6 +115,7 @@ export default function BuyScreen() {
               </View>
             </>
           ) : null}
+          {crossesEuBorder(listing.country, shipCountry) ? <Muted>{CUSTOMS_NOTE}</Muted> : null}
           {blocked ? (
             <>
               <Notice tone="warn">Pardavėjas nenurodė siuntimo kainos į šią šalį, todėl apmokėti siuntimo dar negalima. Paklauskite kainos – sutarus pardavėjas ją įrašys skelbime.</Notice>

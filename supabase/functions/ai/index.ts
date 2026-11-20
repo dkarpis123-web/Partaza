@@ -1,6 +1,7 @@
 // Partaza AI helpers for sellers, run on Claude:
 //   { action: 'recognize', photos: [public photo URLs], lang }       → title, part number, fit, vehicle type, visible damage
 //   { action: 'match', photo: public photo URL, lang }               → which listings on the marketplace show the same kind of part
+//   { action: 'improve', listing_id, lang }                        → corrected title, description, part number and fit for the caller's own listing
 //   { action: 'price', title, oem, fits, condition, defects, country, lang } → price range in EUR from public web pages, with sources
 // Only signed-in users may call it, and each user has a daily limit, because every call costs money.
 //
@@ -172,9 +173,10 @@ async function price(body: Json): Promise<Json> {
 
   const result = await claude({
     model: SEARCH_MODEL,
-    max_tokens: 1500,
+    max_tokens: 3000,
     tools: [
-      { type: 'web_search_20250305', name: 'web_search', max_uses: 4, user_location: { type: 'approximate', country } },
+      // No user_location: the search tool rejects some countries (e.g. LT); the country is named in the request instead.
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 4 },
       {
         name: 'report_prices',
         description: 'Reports the asking prices found for this part. Call it once, after searching.',
@@ -207,11 +209,11 @@ async function price(body: Json): Promise<Json> {
         `Part: ${title || '(no title)'}\nPart number: ${oem || '(unknown)'}\nFits: ${text(body.fits, 200) || '(unknown)'}\n` +
         `Condition: ${text(body.condition, 20) || 'used'}${body.defects ? ', with visible damage' : ''}\nSeller country: ${country}\n\n` +
         `Search the web for current asking prices of this part in the same condition, preferring the part number and European marketplaces and shops. ` +
-        `Convert prices to EUR. Then call report_prices. If you cannot find this specific part, set found to false rather than estimating.`,
+        `Convert prices to EUR. Then call the report_prices tool exactly once (do not answer in plain text). If you cannot find this specific part, set found to false rather than estimating.`,
     }],
   });
   const blocks: Json[] = result.content ?? [];
-  const found = blocks.find((b) => b.type === 'tool_use' && b.name === 'report_prices')?.input;
+  const found = toolInput(result, 'report_prices');
   if (!found || found.found !== true || !(Number(found.typical) > 0)) return { found: false, note: text(found?.note, 400) };
   // Only pages the search really returned may be shown as sources.
   const seen = new Set<string>();
@@ -231,6 +233,60 @@ async function price(body: Json): Promise<Json> {
     high: Number(found.high) > 0 ? Number(found.high) : typical,
     note: text(found.note, 400),
     sources,
+  };
+}
+
+/** Reviews the seller's own listing against its photos and proposes corrections; nothing is saved here. */
+// deno-lint-ignore no-explicit-any
+async function improve(body: Json, admin: any, userId: string): Promise<Json> {
+  if (typeof body.listing_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.listing_id)) return { error: 'bad_request' };
+  const { data: listing } = await admin.from('listings').select('seller_id, title, description, oem, fits, condition, vehicle_type, photos').eq('id', body.listing_id).maybeSingle();
+  if (!listing || listing.seller_id !== userId) return { error: 'not_yours' };
+  const photos = (Array.isArray(listing.photos) ? listing.photos : []).filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u)).slice(0, 4);
+
+  const result = await claude({
+    model: VISION_MODEL,
+    max_tokens: 2500,
+    tools: [{
+      name: 'propose_listing',
+      description: 'Proposes the corrected listing texts.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Clear listing title: part name, side/position if known, make and model if known. At most 90 characters.' },
+          description: { type: 'string', description: 'Tidy description built only from the seller\'s own text and what is visible in the photos. Empty if there is nothing to say.' },
+          oem: { type: 'string', description: 'Part number: the seller\'s, or one clearly readable in the photos. Never guess.' },
+          fits: { type: 'string', description: 'Vehicles the part fits: the seller\'s text tidied up, extended only by what is visible or follows from a readable part number.' },
+          notes: { type: 'array', items: { type: 'string' }, description: 'What you changed and why, one short sentence each; also anything the seller should check or add (e.g. a number in the photo differs from the text). At most 6.' },
+        },
+        required: ['title', 'description', 'oem', 'fits', 'notes'],
+      },
+    }],
+    messages: [{
+      role: 'user',
+      content: [
+        ...photos.map((url: string) => ({ type: 'image', source: { type: 'url', url } })),
+        {
+          type: 'text',
+          text:
+            `A seller wrote this vehicle-part listing by hand and asks you to review and improve it. Photos of the part are above (there may be none).\n\n` +
+            `Title: ${text(listing.title, 200)}\nDescription: ${text(listing.description, 2000) || '(empty)'}\nPart number: ${text(listing.oem, 80) || '(empty)'}\n` +
+            `Fits: ${text(listing.fits, 400) || '(empty)'}\nCondition: ${text(listing.condition, 20)}\nVehicle type: ${text(listing.vehicle_type, 20)}\n\n` +
+            `Fix spelling and wording, make the title clear and searchable, read part numbers and labels from the photos and correct the part number and fit if the photos show otherwise. ` +
+            `Do not invent facts, do not change the meaning, do not add praise or sales talk, and keep everything the seller stated about condition and defects. ` +
+            `Write in ${language(body.lang)}. Answer by calling the propose_listing tool exactly once (do not answer in plain text).`,
+        },
+      ],
+    }],
+  });
+  const found = toolInput(result, 'propose_listing');
+  if (!text(found.title, 120)) return { error: 'ai_error' };
+  return {
+    title: text(found.title, 120),
+    description: text(found.description, 3000),
+    oem: text(found.oem, 60),
+    fits: text(found.fits, 400),
+    notes: (Array.isArray(found.notes) ? found.notes : []).map((n: unknown) => text(n, 240)).filter(Boolean).slice(0, 6),
   };
 }
 
@@ -258,13 +314,14 @@ Deno.serve(async (req: Request) => {
   } catch (_) {
     return reply({ error: 'bad_request' });
   }
-  if (body.action !== 'recognize' && body.action !== 'price' && body.action !== 'match') return reply({ error: 'bad_request' });
+  if (!['recognize', 'price', 'match', 'improve'].includes(body.action)) return reply({ error: 'bad_request' });
 
   const { data: used } = await admin.rpc('ai_use', { p_user: who.user.id, p_limit: DAILY_LIMIT });
   if (used === false) return reply({ error: 'daily_limit' });
 
   try {
     if (body.action === 'match') return reply(await match(body, admin));
+    if (body.action === 'improve') return reply(await improve(body, admin, who.user.id));
     return reply(body.action === 'recognize' ? await recognize(body) : await price(body));
   } catch (error) {
     console.error('ai failed', body.action, (error as Error).message);

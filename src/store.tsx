@@ -86,6 +86,10 @@ interface Store extends State {
   /** Search by photo: uploads the photo and asks the AI which listings show the same kind of part. */
   aiMatch: (photo: string) => Promise<{ name?: string; oem?: string; ids?: string[]; error?: string }>;
   /** Asks the AI to look up current asking prices for this part on public web pages. */
+  /** AI review of the caller's own listing: proposed texts, nothing saved. */
+  aiImprove: (listingId: string) => Promise<{ fix?: ListingFix; error?: string }>;
+  /** Saves the proposed texts the seller confirmed. */
+  applyFix: (listingId: string, fields: Partial<Omit<ListingFix, 'notes'>>) => Result;
   aiPrices: (part: { title: string; oem: string; fits: string; condition: string; defects: boolean; country: string }) => Promise<{ prices?: WebPrices; error?: string }>;
   /** Follows or unfollows a seller. */
   toggleFollow: (sellerId: string) => Result;
@@ -305,7 +309,16 @@ const VAT_ERRORS: Record<string, string> = {
   server_error: 'Nepavyko patikrinti PVM kodo. Bandykite dar kartą.',
 };
 
+export interface ListingFix {
+  title: string;
+  description: string;
+  oem: string;
+  fits: string;
+  notes: string[];
+}
+
 const AI_ERRORS: Record<string, string> = {
+  not_yours: 'Peržiūrėti galima tik savo skelbimą.',
   not_authenticated: 'DI įrankiai veikia tik prisijungus.',
   not_configured: 'DI įrankiai dar neįjungti.',
   daily_limit: 'Šiandien DI įrankių limitas išnaudotas. Bandykite rytoj.',
@@ -743,6 +756,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { prices: { found: data.found === true, low: data.low, typical: data.typical, high: data.high, note: data.note ?? '', sources: data.sources ?? [] } };
     };
 
+    const aiImprove: Store['aiImprove'] = async (listingId) => {
+      const { data, error } = await askAi({ action: 'improve', listing_id: listingId });
+      if (!data) return { error };
+      const notes = Array.isArray(data.notes) ? data.notes.map(String) : [];
+      return { fix: { title: String(data.title ?? ''), description: String(data.description ?? ''), oem: String(data.oem ?? ''), fits: String(data.fits ?? ''), notes } };
+    };
+
+    const applyFix: Store['applyFix'] = async (listingId, fields) => {
+      if (Object.keys(fields).length === 0) return null;
+      if (supabase) {
+        const { error } = await supabase.from('listings').update(fields).eq('id', listingId);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, ...fields } : l)) }));
+      return null;
+    };
+
     const blockUser: Store['blockUser'] = async (userId) => {
       const { me } = stateRef.current;
       if (supabase) {
@@ -1122,7 +1152,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(
