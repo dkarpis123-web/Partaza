@@ -27,17 +27,23 @@ jobs:
         run: eas build --platform android --profile preview --non-interactive --json > build.json
       - name: Put the download link on the website
         run: |
-          git checkout -- .
           node -e "
             const b = JSON.parse(require('fs').readFileSync('build.json', 'utf8'))[0];
             const url = b && b.artifacts && (b.artifacts.applicationArchiveUrl || b.artifacts.buildUrl);
             if (!url) { console.error('No APK link in the build result'); process.exit(1); }
-            require('fs').writeFileSync('public/android.json', JSON.stringify({ url, version: b.appVersion || null, built: new Date().toISOString() }, null, 2) + '\n');
+            require('fs').writeFileSync('/tmp/android.json', JSON.stringify({ url, version: b.appVersion || null, built: new Date().toISOString() }, null, 2) + '\n');
           "
           rm build.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/android.json
-          git commit -m "Nauja bandomoji Android programėlė svetainėje"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          # The site may have changed while the app was building: start from the newest version each try.
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/android.json public/android.json
+            git add public/android.json
+            git commit -m "Nauja bandomoji Android programėlė svetainėje"
+            if git push origin HEAD:main; then exit 0; fi
+            sleep 5
+          done
+          exit 1
