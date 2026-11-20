@@ -206,6 +206,7 @@ export default function ListingScreen() {
           {seller.reviews > 0 ? ` · ${seller.rating.toFixed(1).replace('.', ',')} iš 5 (${seller.reviews})` : ' · atsiliepimų dar nėra'}
         </Muted>
         {seller.since ? <Muted>Prekiauja nuo {seller.since}</Muted> : null}
+        <Button label="Visi šio pardavėjo skelbimai" kind="outline" onPress={() => router.push(`/seller/${listing.sellerId}`)} />
       </Card>
 
       {mine || !canBuy ? null : (

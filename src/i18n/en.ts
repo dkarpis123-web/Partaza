@@ -358,6 +358,8 @@ export const EN: Record<string, string> = {
   'Įkeliama…': 'Uploading…',
   'Nuotrauką ar logotipą pirkėjai mato jūsų skelbimuose.': 'Buyers see your photo or logo on your listings.',
 
+  'Visi šio pardavėjo skelbimai': 'All listings from this seller',
+  'Šis pardavėjas šiuo metu nieko neparduoda.': 'This seller has nothing for sale right now.',
   'Programėlė': 'App',
   'Programėlė telefonui': 'Phone app',
   'Bandomoji versija: programėlė dar tobulinama ir parduotuvėse jos nėra.': 'Test version: the app is still being improved and is not in the app stores yet.',
@@ -561,6 +563,7 @@ export const EN_PATTERNS: [RegExp, string | ((...groups: string[]) => string)][]
   [/^Jei adresas (.+) užregistruotas, išsiuntėme laišką su nuoroda naujam slaptažodžiui\. Nuoroda galioja trumpai\.$/, 'If the address $1 is registered, we have sent a message with a link for a new password. The link is valid for a short time.'],
   [/^Užblokuoti naudotojai \((\d+)\)$/, 'Blocked users ($1)'],
   [/^Mano skelbimai \((\d+)\)$/, 'My listings ($1)'],
+  [/^Pardavėjo skelbimai \((\d+)\)$/, 'Seller’s listings ($1)'],
   [/^Įsiminti skelbimai \((\d+)\)$/, 'Saved listings ($1)'],
   [/^Užsakymai \((\d+) vykdomi\)$/, 'Orders ($1 in progress)'],
   [/^Perku \((\d+)\)$/, 'Buying ($1)'],
