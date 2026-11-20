@@ -51,7 +51,7 @@ export function AiReview({ listing }: { listing: Listing }) {
   if (!fix) {
     return (
       <View style={{ gap: 8 }}>
-        <Button label={busy ? 'DI peržiūri skelbimą…' : 'DI peržiūra: pataisyti skelbimą'} kind="outline" disabled={busy} onPress={ask} />
+        <Button label={busy ? 'DI peržiūri skelbimą…' : 'DI peržiūra: pataisyti skelbimą pagal nuotraukas'} disabled={busy} onPress={ask} />
         {busy ? <Muted>DI skaito tekstą ir žiūri nuotraukas. Tai užtrunka keliolika sekundžių. Niekas nekeičiama be jūsų patvirtinimo.</Muted> : null}
         {done ? <Notice>Pakeitimai išsaugoti.</Notice> : null}
         {problem ? <Notice tone="warn">{problem}</Notice> : null}
@@ -85,6 +85,7 @@ export function AiReview({ listing }: { listing: Listing }) {
       {problem ? <Notice tone="warn">{problem}</Notice> : null}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button label="Atmesti" kind="outline" disabled={busy} onPress={() => setFix(null)} style={{ flex: 1 }} />
+        <Button label={busy ? 'DI svarsto…' : 'Persvarstyti'} kind="outline" disabled={busy} onPress={ask} style={{ flex: 1 }} />
         {chosen.length > 0 ? <Button label={busy ? 'Saugoma…' : 'Patvirtinti pakeitimus'} disabled={busy} onPress={confirm} style={{ flex: 1 }} /> : null}
       </View>
       <Muted>DI gali klysti. Prieš tvirtindami patikrinkite dalies numerį ir tinkamumą – už skelbimo teisingumą atsako pardavėjas.</Muted>

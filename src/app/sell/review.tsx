@@ -107,6 +107,31 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [publishing, setPublishing] = useState(false);
   /** 'ok' | 'unsure' | an error text: how the AI recognition went. */
   const [aiNote, setAiNote] = useState('');
+  // "Look again": the AI reads the current photos and proposes the fields; the seller decides whether to use them.
+  const [againBusy, setAgainBusy] = useState(false);
+  const [againProblem, setAgainProblem] = useState('');
+  const [proposal, setProposal] = useState<Recognition | null>(null);
+  const lookAgain = async () => {
+    if (againBusy) return;
+    if (!registered) return router.push('/register');
+    setAgainBusy(true);
+    setAgainProblem('');
+    const answer = await aiRecognize(photos);
+    setAgainBusy(false);
+    setPhotos(answer.photos);
+    if (!answer.result) return setAgainProblem(answer.error ?? 'DI įrankis atsakė klaida. Bandykite dar kartą po minutės.');
+    if (!answer.result.title) return setAgainProblem('DI nuotraukose dalies neatpažino. Užpildykite laukus patys.');
+    setProposal(answer.result);
+  };
+  const applyProposal = () => {
+    if (!proposal) return;
+    setTitle(proposal.title);
+    if (proposal.oem) setOem(proposal.oem);
+    if (proposal.fits) setFits(proposal.fits);
+    setVehicleType(proposal.vehicleType);
+    if (proposal.suggestedDefects.length > 0) setDefects(proposal.suggestedDefects);
+    setProposal(null);
+  };
   const [webPrices, setWebPrices] = useState<WebPrices | null>(null);
   const [webBusy, setWebBusy] = useState(false);
   const [webProblem, setWebProblem] = useState('');
@@ -224,6 +249,24 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       <Card>
         <Heading>Nuotraukos ({photos.length})</Heading>
         <PhotoEditor photos={photos} onChange={setPhotos} />
+        {live && !whole && photos.length > 0 ? (
+          <Button label={againBusy ? 'DI žiūri į nuotraukas…' : proposal ? 'DI: persvarstyti dar kartą' : 'DI: atpažinti iš naujo pagal nuotraukas'} kind="outline" disabled={againBusy} onPress={lookAgain} />
+        ) : null}
+        {againBusy ? <Muted>DI skaito numerius ir užrašus nuotraukose. Tai užtrunka keliolika sekundžių. Laukai nekeičiami be jūsų patvirtinimo.</Muted> : null}
+        {againProblem ? <Notice tone="warn">{againProblem}</Notice> : null}
+        {proposal ? (
+          <View style={{ gap: 6, padding: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 10 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>DI siūlo pagal nuotraukas</Text>
+            <Muted>{`${tr('Pavadinimas')}: ${proposal.title}`}</Muted>
+            {proposal.oem ? <Muted>{`${tr('Dalies numeris')}: ${proposal.oem}`}</Muted> : null}
+            {proposal.fits ? <Muted>{`${tr('Kam tinka')}: ${proposal.fits}`}</Muted> : null}
+            {proposal.suggestedDefects.length > 0 ? <Muted>{`${tr('Defektai')}: ${proposal.suggestedDefects.join(', ')}`}</Muted> : null}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button label="Palikti kaip yra" kind="outline" onPress={() => setProposal(null)} style={{ flex: 1 }} />
+              <Button label="Pritaikyti" onPress={applyProposal} style={{ flex: 1 }} />
+            </View>
+          </View>
+        ) : null}
       </Card>
 
       <Card>
