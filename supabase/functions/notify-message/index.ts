@@ -6,7 +6,7 @@
 // - the e-mail never contains the message text, only the listing title and a link;
 // - at most one e-mail per thread and recipient every 30 minutes;
 // - nothing is sent if either person has blocked the other;
-// - does nothing until RESEND_API_KEY is set in the project's Edge Function secrets.
+// - does nothing until BREVO_API_KEY or RESEND_API_KEY is set in the project's Edge Function secrets.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -69,8 +69,10 @@ Deno.serve(async (req: Request) => {
   const { data: last } = await admin.from('notification_log').select('sent_at').eq('thread_id', threadId).eq('recipient_id', recipientId).maybeSingle();
   if (last && Date.now() - new Date(last.sent_at).getTime() < THROTTLE_MINUTES * 60_000) return reply({ skipped: 'recent' });
 
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  if (!apiKey) return reply({ skipped: 'not_configured' });
+  // Either provider works; whichever key is set in the Edge Function secrets is used.
+  const brevoKey = Deno.env.get('BREVO_API_KEY');
+  const resendKey = Deno.env.get('RESEND_API_KEY');
+  if (!brevoKey && !resendKey) return reply({ skipped: 'not_configured' });
 
   const { data: recipient } = await admin.auth.admin.getUserById(recipientId);
   const email = recipient?.user?.email;
@@ -82,16 +84,20 @@ Deno.serve(async (req: Request) => {
   const link = `${site}/chat/${threadId}`;
   const text = `Sveiki,\n\ngavote naują žinutę apie „${title}“.\n\nPerskaityti ir atsakyti: ${link}\n\nŠis laiškas išsiųstas automatiškai. Apie tą patį pokalbį primename ne dažniau kaip kas ${THROTTLE_MINUTES} minučių.\n\nPartaza`;
 
-  const sent = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: Deno.env.get('MAIL_FROM') ?? 'Partaza <pranesimai@partaza.eu>',
-      to: [email],
-      subject: `Nauja žinutė apie „${title}“`,
-      text,
-    }),
-  });
+  const fromName = Deno.env.get('MAIL_FROM_NAME') ?? 'Partaza';
+  const fromEmail = Deno.env.get('MAIL_FROM_EMAIL') ?? 'pranesimai@partaza.eu';
+  const subject = `Nauja žinutė apie „${title}“`;
+  const sent = brevoKey
+    ? await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ sender: { name: fromName, email: fromEmail }, to: [{ email }], subject, textContent: text }),
+      })
+    : await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [email], subject, text }),
+      });
   if (!sent.ok) return reply({ error: 'mail_failed', status: sent.status }, 502);
 
   await admin.from('notification_log').upsert({ thread_id: threadId, recipient_id: recipientId, sent_at: new Date().toISOString() });
