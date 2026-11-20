@@ -25,7 +25,7 @@ function parsePrice(text: string): number | null {
 export default function ReviewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; donor?: string }>();
-  const { listings, donors, registered, live, addListing } = useStore();
+  const { listings, donors, registered, addListing } = useStore();
   const donor = donors.find((d) => d.id === params.donor);
 
   const photos = useMemo<string[]>(() => {

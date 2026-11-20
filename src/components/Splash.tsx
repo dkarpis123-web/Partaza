@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/theme';
@@ -12,10 +12,10 @@ const native = Platform.OS !== 'web';
  */
 export function Splash() {
   const [done, setDone] = useState(false);
-  const word = useRef(new Animated.Value(0)).current;
-  const line = useRef(new Animated.Value(0)).current;
-  const tagline = useRef(new Animated.Value(0)).current;
-  const cover = useRef(new Animated.Value(1)).current;
+  const [word] = useState(() => new Animated.Value(0));
+  const [line] = useState(() => new Animated.Value(0));
+  const [tagline] = useState(() => new Animated.Value(0));
+  const [cover] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     let cancelled = false;

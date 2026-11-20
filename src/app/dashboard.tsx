@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { Button, Card, Heading, Muted, Notice, Page, Row } from '@/components/ui';
@@ -24,6 +24,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { listings, donors, me, registered } = useStore();
   const stats = sellerStats(listings, donors, me.id);
+  const [now] = useState(() => Date.now());
 
   if (stats.activeCount + stats.soldCount === 0 && donors.length === 0) {
     return (
@@ -35,7 +36,7 @@ export default function DashboardScreen() {
     );
   }
 
-  const days = stats.firstListingAt ? Math.max(1, Math.round((Date.now() - stats.firstListingAt) / 86400000)) : 0;
+  const days = stats.firstListingAt ? Math.max(1, Math.round((now - stats.firstListingAt) / 86400000)) : 0;
 
   return (
     <Page>

@@ -71,6 +71,14 @@ export interface Listing {
   soldPrice?: number | null;
 }
 
+/** The buyer's own vehicle, kept on this device only, used to filter parts that fit. */
+export interface MyCar {
+  make: string;
+  model: string;
+  vin: string;
+  year: number | null;
+}
+
 /** A vehicle the seller bought to dismantle. Private to the seller. */
 export interface Donor {
   id: string;

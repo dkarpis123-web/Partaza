@@ -1,9 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
-import { Card, Chip, Muted, Page } from '@/components/ui';
+import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
+import { fitsCar, readVin } from '@/services/vin';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -26,7 +27,7 @@ function totalPrice(listing: Listing): number {
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; type?: string }>();
-  const { listings } = useStore();
+  const { listings, myCar, setMyCar } = useStore();
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState(params.q ?? '');
@@ -39,12 +40,31 @@ export default function SearchScreen() {
   const [pickup, setPickup] = useState(true);
   const [sort, setSort] = useState<Sort>('cheapest');
   const [showFilters, setShowFilters] = useState(false);
+  const [onlyMyCar, setOnlyMyCar] = useState(false);
+  const [editCar, setEditCar] = useState(false);
+  const [vinText, setVinText] = useState('');
+  const [makeText, setMakeText] = useState('');
+  const [modelText, setModelText] = useState('');
+  const [carError, setCarError] = useState('');
+  const vinInfo = readVin(vinText);
+
+  const saveCar = () => {
+    const make = makeText.trim() || vinInfo?.make || '';
+    if (vinText.trim() && !vinInfo) return setCarError('VIN turi būti 17 ženklų, be raidžių I, O ir Q.');
+    if (!make) return setCarError('Įrašykite markę, pvz., Volkswagen.');
+    setMyCar({ make, model: modelText.trim(), vin: vinInfo?.vin ?? '', year: vinInfo?.year ?? null });
+    setOnlyMyCar(true);
+    setEditCar(false);
+    setCarError('');
+  };
 
   // Parameters arrive again when the user searches from the home screen.
-  useEffect(() => {
+  const [seenParams, setSeenParams] = useState({ q: params.q, type: params.type });
+  if (seenParams.q !== params.q || seenParams.type !== params.type) {
+    setSeenParams({ q: params.q, type: params.type });
     if (params.q !== undefined) setQuery(params.q);
     if (params.type !== undefined) setType((params.type as VehicleType) || null);
-  }, [params.q, params.type]);
+  }
 
   const countries = useMemo(() => Array.from(new Set(listings.map((l) => l.country))).sort(), [listings]);
 
@@ -58,6 +78,7 @@ export default function SearchScreen() {
       if (c && !normalize(l.city).includes(c)) return false;
       if (onlyNoDefects && l.defects.length > 0) return false;
       if (onlyClassic && !l.classic) return false;
+      if (onlyMyCar && myCar && !fitsCar(`${l.fits} ${l.title}`, myCar.make, myCar.model)) return false;
       if (l.status === 'sold') return false;
       const deliverable = l.shipping !== null;
       if (!((delivery && deliverable) || (pickup && l.pickup))) return false;
@@ -68,7 +89,7 @@ export default function SearchScreen() {
       if (sort === 'place') return `${a.country} ${a.city}`.localeCompare(`${b.country} ${b.city}`, 'lt');
       return totalPrice(a) - totalPrice(b);
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, delivery, pickup, sort]);
+  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMyCar, myCar, delivery, pickup, sort]);
 
   return (
     <Page>
@@ -83,6 +104,51 @@ export default function SearchScreen() {
           borderRadius: radius.md, backgroundColor: colors.surface, fontSize: 16, fontWeight: '600', color: colors.ink,
         }}
       />
+      {myCar && !editCar ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <Chip label={`Tinka: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}`} selected={onlyMyCar} onPress={() => setOnlyMyCar((v) => !v)} />
+          <Button
+            label="Keisti automobilį"
+            kind="quiet"
+            onPress={() => {
+              setVinText(myCar.vin);
+              setMakeText(myCar.make);
+              setModelText(myCar.model);
+              setEditCar(true);
+            }}
+          />
+        </View>
+      ) : null}
+      {!myCar && !editCar ? <Button label="Rodyti tik mano automobiliui tinkančias dalis" kind="outline" onPress={() => setEditCar(true)} /> : null}
+      {editCar ? (
+        <Card>
+          <Field label="VIN (nebūtina)" value={vinText} onChangeText={(t) => { setVinText(t); setCarError(''); }} autoCapitalize="characters" hint="Iš VIN atpažįstame markę ir metus. Modelį įrašykite patys." />
+          {vinInfo ? (
+            <Muted>
+              {vinInfo.make ? `Markė: ${vinInfo.make}` : 'Markės pagal šį VIN neatpažinome'}{vinInfo.year ? ` · apie ${vinInfo.year} m.` : ''}
+            </Muted>
+          ) : null}
+          <Field label="Markė" value={makeText || vinInfo?.make || ''} onChangeText={(t) => { setMakeText(t); setCarError(''); }} placeholder="Pvz., Volkswagen" />
+          <Field label="Modelis" value={modelText} onChangeText={setModelText} placeholder="Pvz., Transporter" />
+          {carError ? <Notice tone="warn">{carError}</Notice> : null}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button label="Išsaugoti" onPress={saveCar} style={{ flex: 1 }} />
+            <Button label="Atšaukti" kind="outline" onPress={() => { setEditCar(false); setCarError(''); }} style={{ flex: 1 }} />
+          </View>
+          {myCar ? (
+            <Button
+              label="Pašalinti automobilį"
+              kind="quiet"
+              onPress={() => {
+                setMyCar(null);
+                setOnlyMyCar(false);
+                setEditCar(false);
+              }}
+            />
+          ) : null}
+          <Muted>Automobilis saugomas tik šiame įrenginyje. Tinkamumą tikriname pagal pardavėjo įrašytą tekstą „Kam tinka“, todėl prieš pirkdami sutikrinkite dalies numerį.</Muted>
+        </Card>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Chip label={showFilters ? 'Slėpti filtrus' : 'Vieta, gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
         <Chip label="Istoriniai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />

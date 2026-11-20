@@ -1,8 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
-import type { Donor, Listing, ListingDraft, Message, SellerKind, Thread, User } from '@/types';
+import type { Donor, Listing, ListingDraft, Message, MyCar, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -26,6 +27,9 @@ type Result = Promise<string | null>;
 
 interface Store extends State {
   live: boolean;
+  /** Saved on this device only; never sent to the server. */
+  myCar: MyCar | null;
+  setMyCar: (car: MyCar | null) => void;
   registerDemo: (name: string, kind: SellerKind) => void;
   signUp: (email: string, password: string, name: string, kind: SellerKind) => Result;
   signIn: (email: string, password: string) => Result;
@@ -72,6 +76,8 @@ const ERRORS: Record<string, string> = {
   not_authenticated: 'Pirmiausia prisijunkite.',
   'Invalid login credentials': 'Neteisingas el. paštas arba slaptažodis.',
   'User already registered': 'Toks el. paštas jau užregistruotas. Prisijunkite.',
+  'Email not confirmed': 'El. paštas dar nepatvirtintas. Atidarykite laišką ir paspauskite nuorodą.',
+  'rate limit': 'Per daug bandymų per trumpą laiką. Palaukite kelias minutes ir bandykite dar kartą.',
 };
 
 function explain(error: { message?: string } | null | undefined): string {
@@ -120,8 +126,24 @@ const StoreContext = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(initialState);
+  // Actions read the latest state through this ref so they never work on a stale copy.
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  });
+
+  const [myCar, setMyCarState] = useState<MyCar | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem('partaza.myCar')
+      .then((raw) => {
+        if (raw) setMyCarState(JSON.parse(raw));
+      })
+      .catch(() => {});
+  }, []);
+  const setMyCar = useCallback((car: MyCar | null) => {
+    setMyCarState(car);
+    (car ? AsyncStorage.setItem('partaza.myCar', JSON.stringify(car)) : AsyncStorage.removeItem('partaza.myCar')).catch(() => {});
+  }, []);
 
   /* ---------- Live mode: loading ---------- */
 
@@ -170,7 +192,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!supabase) return;
-    refresh();
+    // Fires once at start (INITIAL_SESSION) and again on every sign-in, sign-out and token refresh.
     const { data: auth } = supabase.auth.onAuthStateChange(() => {
       // Deferred: Supabase advises against calling its API directly inside this callback.
       setTimeout(refresh, 0);
@@ -207,7 +229,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     const signUp: Store['signUp'] = async (email, password, name, kind) => {
       if (!supabase) return null;
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind } } });
+      // After confirming the e-mail the person lands back on this site (web) instead of a default address.
+      const emailRedirectTo = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind }, emailRedirectTo } });
       if (error) return explain(error);
       if (!data.session) return 'Išsiuntėme laišką. Patvirtinkite el. pašto adresą ir tada prisijunkite.';
       await refresh();
@@ -433,13 +457,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...state,
       ...actions,
       live,
+      myCar,
+      setMyCar,
       refresh,
       userById: (id) => (id === state.me.id ? state.me : state.users.find((u) => u.id === id) ?? UNKNOWN),
       listingById: (id) => state.listings.find((l) => l.id === id),
       threadById: (id) => state.threads.find((t) => t.id === id),
       threadForListing: (listingId) => state.threads.find((t) => t.listingId === listingId && t.buyerId === state.me.id),
     }),
-    [state, actions, refresh],
+    [state, actions, refresh, myCar, setMyCar],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
