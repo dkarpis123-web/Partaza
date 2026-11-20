@@ -67,6 +67,8 @@ function newId(prefix: string): string {
   return `${prefix}${Date.now()}_${counter}`;
 }
 
+export const ALREADY_REGISTERED = 'Šis el. paštas jau užregistruotas. Prisijunkite su juo – naujo laiško nesiunčiame.';
+
 const ERRORS: Record<string, string> = {
   amount_out_of_range: 'Pasiūlymas turi būti mažesnis už skelbimo kainą.',
   offers_not_allowed: 'Pardavėjas šiam skelbimui pasiūlymų nepriima.',
@@ -75,7 +77,7 @@ const ERRORS: Record<string, string> = {
   not_allowed: 'Į savo pasiūlymą atsakyti negalima.',
   not_authenticated: 'Pirmiausia prisijunkite.',
   'Invalid login credentials': 'Neteisingas el. paštas arba slaptažodis.',
-  'User already registered': 'Toks el. paštas jau užregistruotas. Prisijunkite.',
+  'User already registered': ALREADY_REGISTERED,
   'Email not confirmed': 'El. paštas dar nepatvirtintas. Atidarykite laišką ir paspauskite nuorodą.',
   'rate limit': 'Per daug bandymų per trumpą laiką. Palaukite kelias minutes ir bandykite dar kartą.',
 };
@@ -233,6 +235,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const emailRedirectTo = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind }, emailRedirectTo } });
       if (error) return explain(error);
+      // For an address that is already registered the server answers "success" without sending
+      // anything (so strangers cannot probe addresses); the tell-tale is an empty identities list.
+      if (!data.session && data.user && (data.user.identities ?? []).length === 0) return ALREADY_REGISTERED;
       if (!data.session) return `Išsiuntėme laišką adresu ${email}. Paspauskite jame nuorodą ir tada prisijunkite. Jei adresas su klaida, registruokitės iš naujo teisingu adresu.`;
       await refresh();
       return null;

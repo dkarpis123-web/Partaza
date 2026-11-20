@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
 import { Button, Field, Heading, Muted, Notice, Page } from '@/components/ui';
-import { useStore } from '@/store';
+import { ALREADY_REGISTERED, useStore } from '@/store';
 import { colors, radius } from '@/theme';
 import type { SellerKind } from '@/types';
 
@@ -38,7 +38,11 @@ export default function RegisterScreen() {
       ? await signIn(email.trim(), password)
       : await signUp(email.trim(), password, name.trim(), kind);
     setBusy(false);
-    if (problem) return setError(problem);
+    if (problem) {
+      // Already registered: show the sign-in form with the address kept, so one more tap signs in.
+      if (problem === ALREADY_REGISTERED) setMode('signIn');
+      return setError(problem);
+    }
     router.back();
   };
 
