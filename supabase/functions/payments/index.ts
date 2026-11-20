@@ -105,6 +105,39 @@ async function stripe(method: 'GET' | 'POST', path: string, params?: Json, idemp
   return json;
 }
 
+/** Accounts v2 API: JSON bodies and a dated version header. Stripe requires it for new connected accounts. */
+const V2_VERSION = '2026-11-18.endive';
+async function stripeV2(method: 'GET' | 'POST', path: string, body?: Json, idempotencyKey?: string): Promise<Json> {
+  let query = '';
+  if (method === 'GET' && body) {
+    const params = new URLSearchParams();
+    encode(body, '', params);
+    query = `?${params}`;
+  }
+  const response = await fetch(`https://api.stripe.com/v2/${path}${query}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${STRIPE_KEY}`,
+      'Stripe-Version': V2_VERSION,
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
+    body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new StripeError(json?.error?.message ?? `stripe_${response.status}`, json?.error?.code ?? json?.error?.type ?? 'stripe_error');
+  return json;
+}
+
+/** Can this connected account receive transfers? Read from the v2 recipient configuration. */
+function recipientState(account: Json): { ready: boolean; submitted: boolean } {
+  const balance = account.configuration?.recipient?.capabilities?.stripe_balance ?? {};
+  const transfers = balance.stripe_transfers?.status;
+  const payouts = balance.payouts?.status;
+  const ready = transfers === 'active' && (payouts === undefined || payouts === 'active');
+  return { ready, submitted: ready || transfers === 'pending' };
+}
+
 async function validSignature(payload: string, header: string): Promise<boolean> {
   const pairs = header.split(',').map((p) => p.trim().split('='));
   const timestamp = pairs.find(([k]) => k === 't')?.[1] ?? '';
@@ -311,35 +344,32 @@ async function webhook(admin: SupabaseClient, payload: string, signature: string
 async function connectStatus(admin: SupabaseClient, userId: string): Promise<Json> {
   const { data: row } = await admin.from('seller_accounts').select('*').eq('seller_id', userId).maybeSingle();
   if (!row) return { configured: true, exists: false, ready: false };
-  const account = await stripe('GET', `accounts/${row.stripe_account_id}`);
-  const ready = !!account.payouts_enabled && account.capabilities?.transfers === 'active';
+  const account = await stripeV2('GET', `core/accounts/${row.stripe_account_id}`, { include: ['configuration.recipient'] });
+  const { ready, submitted } = recipientState(account);
   if (ready !== row.payouts_ready) {
     await admin.from('seller_accounts').update({ payouts_ready: ready, updated_at: new Date().toISOString() }).eq('seller_id', userId);
   }
-  return { configured: true, exists: true, ready, submitted: !!account.details_submitted };
+  return { configured: true, exists: true, ready, submitted };
 }
 
-async function connectStart(admin: SupabaseClient, user: Json, site: string): Promise<Json> {
+async function connectStart(admin: SupabaseClient, user: Json, site: string, country2?: unknown): Promise<Json> {
   let { data: row } = await admin.from('seller_accounts').select('*').eq('seller_id', user.id).maybeSingle();
   if (!row) {
-    const { data: profile } = await admin.from('profiles').select('kind').eq('id', user.id).maybeSingle();
-    const account = await stripe(
+    const { data: profile } = await admin.from('profiles').select('kind, name').eq('id', user.id).maybeSingle();
+    const country = typeof country2 === 'string' && /^[A-Za-z]{2}$/.test(country2) ? country2.toUpperCase() : 'LT';
+    const account = await stripeV2(
       'POST',
-      'accounts',
+      'core/accounts',
       {
-        controller: {
-          stripe_dashboard: { type: 'express' },
-          fees: { payer: 'application' },
-          losses: { payments: 'application' },
-          requirement_collection: 'stripe',
-        },
-        capabilities: { transfers: { requested: true } },
-        email: user.email,
-        business_type: profile?.kind === 'business' ? 'company' : 'individual',
-        business_profile: { url: SITE, product_description: 'Transporto priemonių dalių pardavimas per Partaza' },
+        contact_email: user.email,
+        display_name: profile?.name ?? undefined,
+        identity: { country, entity_type: profile?.kind === 'business' ? 'company' : 'individual' },
+        dashboard: 'express',
+        defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
+        configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
         metadata: { profile_id: user.id },
       },
-      `account-${user.id}`,
+      `account-v2-${user.id}`,
     );
     const inserted = await admin.from('seller_accounts').insert({ seller_id: user.id, stripe_account_id: account.id }).select().maybeSingle();
     row = inserted.data ?? (await admin.from('seller_accounts').select('*').eq('seller_id', user.id).maybeSingle()).data;
@@ -347,14 +377,16 @@ async function connectStart(admin: SupabaseClient, user: Json, site: string): Pr
   }
   const status = await connectStatus(admin, user.id);
   if (status.ready) {
-    const login = await stripe('POST', `accounts/${row.stripe_account_id}/login_links`);
-    return { url: login.url, ready: true };
+    // The seller's own Stripe page; if a personal link cannot be made, Stripe's general sign-in page works too.
+    const login = await stripe('POST', `accounts/${row.stripe_account_id}/login_links`).catch(() => null);
+    return { url: login?.url ?? 'https://connect.stripe.com/express_login', ready: true };
   }
-  const link = await stripe('POST', 'account_links', {
+  const link = await stripeV2('POST', 'core/account_links', {
     account: row.stripe_account_id,
-    type: 'account_onboarding',
-    refresh_url: `${site}/payouts?again=1`,
-    return_url: `${site}/payouts?done=1`,
+    use_case: {
+      type: 'account_onboarding',
+      account_onboarding: { configurations: ['recipient'], refresh_url: `${site}/payouts?again=1`, return_url: `${site}/payouts?done=1` },
+    },
   });
   return { url: link.url, ready: false };
 }
@@ -541,7 +573,7 @@ Deno.serve(async (req: Request) => {
       case 'connect_status':
         return reply(await connectStatus(admin, user.id));
       case 'connect_start':
-        return reply(await connectStart(admin, user, siteFor(req)));
+        return reply(await connectStart(admin, user, siteFor(req), body.country));
       case 'checkout':
         return reply(await checkout(admin, user, body, siteFor(req)));
       case 'sync_order': {
