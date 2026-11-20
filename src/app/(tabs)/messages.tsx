@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { BlockedUsers } from '@/components/BlockedUsers';
 import { Button, Heading, Muted, Notice, Page } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
+import { Text } from '@/components/Text';
 
 export default function MessagesScreen() {
   const { threads, listingById, userById, me, unreadThreadIds, answerOffer, markRead } = useStore();

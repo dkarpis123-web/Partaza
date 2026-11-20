@@ -1,9 +1,10 @@
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 
 import { Button, Muted } from '@/components/ui';
 import { colors, radius } from '@/theme';
+import { Text } from '@/components/Text';
 
 export const MAX_PHOTOS = 8;
 

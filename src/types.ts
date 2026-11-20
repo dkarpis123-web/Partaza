@@ -36,6 +36,8 @@ export interface User {
   rating: number;
   reviews: number;
   since: string;
+  /** The seller's own photo or logo. */
+  logo?: string | null;
 }
 
 export interface Listing {
@@ -63,6 +65,8 @@ export interface Listing {
   description?: string;
   /** Part for a historic / classic vehicle. */
   classic?: boolean;
+  /** Part for motorsport: racing, rally, drift, track cars. */
+  motorsport?: boolean;
   /** When the seller last lowered the price; the 90-day reminder counts from here (or from createdAt). */
   refreshedAt?: number | null;
   /** A whole vehicle sold for parts in one listing, instead of a single part. */

@@ -1,12 +1,13 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Image, Platform, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, View } from 'react-native';
 
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { readVin } from '@/services/vin';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
+import { Text } from '@/components/Text';
 
 const SHOTS = ['1. Visa dalis', '2. Numeris ar lipdukas', '3. Pažeidimai iš arti'];
 

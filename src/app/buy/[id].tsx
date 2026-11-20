@@ -1,11 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button, Card, Chip, Muted, Notice, Page, Row } from '@/components/ui';
 import { openExternal } from '@/services/open';
 import { useStore } from '@/store';
 import { ADMIN_FEE, buyerFee, colors, money } from '@/theme';
+import { Text } from '@/components/Text';
 
 /** PaidOrder summary before the buyer is sent to the payment page. */
 export default function BuyScreen() {

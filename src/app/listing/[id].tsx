@@ -1,13 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
+import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
+import { Text } from '@/components/Text';
 
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -186,7 +188,7 @@ export default function ListingScreen() {
       <Card style={{ gap: 0 }}>
         {listing.description ? <Text style={{ fontSize: 15, lineHeight: 23, color: colors.ink, marginBottom: 8 }}>{listing.description}</Text> : null}
         <Row label="Būklė" value={CONDITION_LABELS[listing.condition]} />
-        <Row label="Transportas" value={`${VEHICLE_LABELS[listing.vehicleType]}${listing.classic ? ' · istorinis' : ''}`} />
+        <Row label="Transportas" value={`${VEHICLE_LABELS[listing.vehicleType]}${listing.classic ? ' · senovinis' : ''}${listing.motorsport ? ' · automotosportas' : ''}`} />
         {listing.wholeVehicle ? <Row label="Parduodama" value="Visas automobilis dalims" /> : null}
         {listing.fits ? <Row label="Tinka" value={listing.fits} /> : null}
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
@@ -195,7 +197,10 @@ export default function ListingScreen() {
       </Card>
 
       <Card>
-        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>{seller.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <SellerLogo uri={seller.logo} name={seller.name} size={44} />
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink, flex: 1 }}>{seller.name}</Text>
+        </View>
         <Muted>
           {seller.kind === 'business' ? 'Verslo pardavėjas · taikoma 14 dienų grąžinimo teisė' : 'Privatus pardavėjas'}
           {seller.reviews > 0 ? ` · ${seller.rating.toFixed(1).replace('.', ',')} iš 5 (${seller.reviews})` : ' · atsiliepimų dar nėra'}

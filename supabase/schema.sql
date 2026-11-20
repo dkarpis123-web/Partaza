@@ -12,6 +12,8 @@ create table if not exists public.profiles (
   kind text not null default 'private' check (kind in ('private', 'business')),
   created_at timestamptz not null default now()
 );
+-- The seller's own photo or logo (a public link into the photo bucket).
+alter table public.profiles add column if not exists logo_url text;
 
 create table if not exists public.listings (
   id uuid primary key default gen_random_uuid(),
@@ -324,6 +326,7 @@ $$;
 -- ---------------------------------------------------------------------------
 
 alter table public.listings add column if not exists classic boolean not null default false;
+alter table public.listings add column if not exists motorsport boolean not null default false;
 
 -- Ardomas automobilis („donoras“). Mato tik jo savininkas.
 create table if not exists public.donors (

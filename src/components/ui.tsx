@@ -1,17 +1,9 @@
 import React from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleProp,
-  Text,
-  TextInput,
-  TextInputProps,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Pressable, ScrollView, StyleProp, TextInputProps, View, ViewStyle } from 'react-native';
 
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { VehicleIcon, type VehicleIconName } from '@/components/VehicleIcon';
+import { Text, TextInput } from '@/components/Text';
 
 /** Scrollable page with a centred, width-limited column (works on phone and desktop). */
 export function Page({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {

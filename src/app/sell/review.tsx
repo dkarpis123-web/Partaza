@@ -1,14 +1,16 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
+import { COUNTRIES, detectCountry } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
 import { VEHICLE_ICONS } from '@/components/VehicleIcon';
+import { Text } from '@/components/Text';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 const CONDITIONS = Object.keys(CONDITION_LABELS) as Condition[];
@@ -77,8 +79,10 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [vat, setVat] = useState(editing?.vat ?? false);
   const [shipping, setShipping] = useState<number | null>(editing ? editing.shipping : whole ? null : 3.5);
   const [city, setCity] = useState(editing?.city ?? '');
+  const [country, setCountry] = useState(() => editing?.country ?? detectCountry() ?? 'Lietuva');
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
+  const [motorsport, setMotorsport] = useState(editing?.motorsport ?? false);
   const [description, setDescription] = useState(editing?.description ?? '');
   const [costText, setCostText] = useState(editing?.cost != null ? toText(editing.cost) : '');
   const [error, setError] = useState('');
@@ -121,8 +125,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     setPublishing(true);
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country: editing?.country ?? 'Lietuva', shipping, pickup: true, photos, allowOffers,
-      classic, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
+      city: city.trim(), country, shipping, pickup: true, photos, allowOffers,
+      classic, motorsport, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
       const problem = await updateListing(editing.id, draft);
@@ -132,8 +136,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     }
     const result = await addListing(whole ? draft : { description: description.trim(),
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country: 'Lietuva', shipping, pickup: true, photos, allowOffers,
-      classic, donorId: donor ? donor.id : null, cost: donor ? null : cost,
+      city: city.trim(), country, shipping, pickup: true, photos, allowOffers,
+      classic, motorsport, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     });
     setPublishing(false);
     if (!result.id) return setError(result.error ?? 'Nepavyko paskelbti.');
@@ -182,7 +186,10 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={vehicleType === t} onPress={() => setVehicleType(t)} />
           ))}
         </ScrollView>
-        <Chip label="Istorinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Chip label="Senovinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
+          <Chip label="Automotosporto dalis" selected={motorsport} onPress={() => setMotorsport((v) => !v)} />
+        </View>
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Būklė</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {CONDITIONS.map((c) => (
@@ -254,6 +261,12 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             <Chip key={s.label} label={s.label} selected={shipping === s.price} onPress={() => setShipping(s.price)} />
           ))}
         </View>
+        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Šalis, kurioje yra dalis</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {[country, ...COUNTRIES.filter((c) => c !== country)].map((c) => (
+            <Chip key={c} label={c} selected={country === c} onPress={() => setCountry(c)} />
+          ))}
+        </ScrollView>
         <Field label="Miestas" value={city} onChangeText={setCity} placeholder="Pvz., Kaunas" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Leisti siūlyti kainą" selected={allowOffers} onPress={() => setAllowOffers((v) => !v)} />

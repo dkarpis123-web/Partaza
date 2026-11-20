@@ -1,9 +1,9 @@
 import React from 'react';
-import { Text } from 'react-native';
 
 import { Heading, Muted, Page } from '@/components/ui';
 import { COMPANY, type LegalSection } from '@/legal/company';
 import { colors } from '@/theme';
+import { Text } from '@/components/Text';
 
 export function LegalPage({ title, sections }: { title: string; sections: LegalSection[] }) {
   return (

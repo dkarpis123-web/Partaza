@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
+import { Text } from '@/components/Text';
 
 const DISCOUNTS = [5, 10, 15];
 

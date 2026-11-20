@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Animated, Easing, Image, Pressable, Text, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, View } from 'react-native';
 
 import { colors } from '@/theme';
+import { Text } from '@/components/Text';
 
 const GLOW = '#F26A1B';
 

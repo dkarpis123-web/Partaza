@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button, Card, Muted, Notice } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors } from '@/theme';
+import { Text } from '@/components/Text';
 
 /** List of people the signed-in person has blocked, each with an "unblock" button. Hidden when empty. */
 export function BlockedUsers() {

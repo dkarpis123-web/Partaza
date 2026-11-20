@@ -1,19 +1,22 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Text, View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
 import { BlockedUsers } from '@/components/BlockedUsers';
+import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { normalizePhone } from '@/services/phone';
 import { STALE_DAYS, staleListings } from '@/services/stats';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, money } from '@/theme';
 import { PAID_ORDER_LABELS } from '@/types';
+import { Text } from '@/components/Text';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, orders, paidOrders, payReady, userById } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, setLogo, signOut, deleteAccount, reducePrice, favorites, orders, paidOrders, payReady, userById } = useStore();
   const openOrders = orders.filter((o) => o.status === 'agreed' || o.status === 'handed').length;
   const saved = listings.filter((l) => favorites.includes(l.id) && (l.status ?? 'active') === 'active');
   const [now] = useState(() => Date.now());
@@ -23,6 +26,15 @@ export default function ProfileScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
   const show = (problem: string | null) => setError(problem ?? '');
+  const [logoBusy, setLogoBusy] = useState(false);
+  const pickLogo = async () => {
+    if (logoBusy) return;
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [1, 1] });
+    if (picked.canceled || !picked.assets[0]) return;
+    setLogoBusy(true);
+    show(await setLogo(picked.assets[0].uri));
+    setLogoBusy(false);
+  };
   const mine = listings.filter((l) => l.sellerId === me.id);
 
   if (!registered) {
@@ -38,8 +50,18 @@ export default function ProfileScreen() {
   return (
     <Page>
       <Card>
-        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.ink }}>{me.name}</Text>
-        <Muted>{me.kind === 'business' ? 'Verslo pardavėjas' : 'Privatus pardavėjas'} · atsiliepimų dar nėra</Muted>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <SellerLogo uri={me.logo} name={me.name} size={64} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.ink }}>{me.name}</Text>
+            <Muted>{me.kind === 'business' ? 'Verslo pardavėjas' : 'Privatus pardavėjas'} · atsiliepimų dar nėra</Muted>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Chip label={logoBusy ? 'Įkeliama…' : me.logo ? 'Keisti nuotrauką ar logotipą' : 'Įkelti savo nuotrauką ar logotipą'} selected={false} onPress={pickLogo} />
+          {me.logo ? <Chip label="Pašalinti nuotrauką" selected={false} onPress={async () => show(await setLogo(null))} /> : null}
+        </View>
+        <Muted>Nuotrauką ar logotipą pirkėjai mato jūsų skelbimuose.</Muted>
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Pardavėjo statusas</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Privatus asmuo" selected={me.kind === 'private'} onPress={async () => show(await setKind('private'))} />

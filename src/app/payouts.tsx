@@ -1,11 +1,11 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Text } from 'react-native';
 
 import { Button, Card, Muted, Notice, Page } from '@/components/ui';
 import { openExternal } from '@/services/open';
 import { type PayoutStatus, useStore } from '@/store';
 import { colors } from '@/theme';
+import { Text } from '@/components/Text';
 
 /** Seller's payout setup: identity and bank account are entered on Stripe's own pages. */
 export default function PayoutsScreen() {

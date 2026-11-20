@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
+import { ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Chip, Heading, Muted, Notice, Page } from '@/components/ui';
@@ -8,6 +8,7 @@ import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { VEHICLE_LABELS, VehicleType } from '@/types';
 import { VEHICLE_ICONS } from '@/components/VehicleIcon';
+import { TextInput } from '@/components/Text';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 
@@ -17,13 +18,14 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [type, setType] = useState<VehicleType | null>(null);
+  const [special, setSpecial] = useState<'classic' | 'motorsport' | null>(null);
 
   const shown = [...listings]
-    .filter((l) => (l.status ?? 'active') === 'active' && (type ? l.vehicleType === type : true))
+    .filter((l) => (l.status ?? 'active') === 'active' && (type ? l.vehicleType === type : true) && (special === 'classic' ? !!l.classic : special === 'motorsport' ? !!l.motorsport : true))
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 12);
 
-  const search = () => router.push({ pathname: '/search', params: { q: query, type: type ?? '' } });
+  const search = () => router.push({ pathname: '/search', params: { q: query, type: type ?? '', special: special ?? '' } });
 
   return (
     <Page>
@@ -44,7 +46,9 @@ export default function HomeScreen() {
         <Button label="Ieškoti" kind="dark" onPress={search} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Chip icon="view-grid-outline" label="Visi" selected={type === null} onPress={() => setType(null)} />
+        <Chip icon="view-grid-outline" label="Visi" selected={type === null && special === null} onPress={() => { setType(null); setSpecial(null); }} />
+        <Chip label="Senoviniai automobiliai" selected={special === 'classic'} onPress={() => setSpecial((v) => (v === 'classic' ? null : 'classic'))} />
+        <Chip label="Automotosportas" selected={special === 'motorsport'} onPress={() => setSpecial((v) => (v === 'motorsport' ? null : 'motorsport'))} />
         {TYPES.map((t) => (
           <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
         ))}

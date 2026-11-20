@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable } from 'react-native';
 
 import { colors } from '@/theme';
+import { Text } from '@/components/Text';
 
 /**
  * "Back" in the header of every inner screen. It is always shown: when the screen was

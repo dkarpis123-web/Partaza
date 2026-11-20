@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button, Card, Heading, Muted, Notice, Page, Row } from '@/components/ui';
 import { sellerStats } from '@/services/stats';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
+import { Text } from '@/components/Text';
 
 function Tile({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
   return (

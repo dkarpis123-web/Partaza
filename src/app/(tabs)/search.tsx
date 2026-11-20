@@ -1,14 +1,16 @@
 import { useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
+import { detectCountry } from '@/services/geo';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, VEHICLE_LABELS, VehicleType } from '@/types';
 import { VEHICLE_ICONS } from '@/components/VehicleIcon';
+import { Text, TextInput } from '@/components/Text';
 
 type Sort = 'cheapest' | 'newest' | 'place';
 const SORT_LABELS: Record<Sort, string> = {
@@ -27,7 +29,7 @@ function totalPrice(listing: Listing): number {
 }
 
 export default function SearchScreen() {
-  const params = useLocalSearchParams<{ q?: string; type?: string }>();
+  const params = useLocalSearchParams<{ q?: string; type?: string; special?: string }>();
   const { listings, myCar, setMyCar } = useStore();
   const { width } = useWindowDimensions();
 
@@ -36,7 +38,8 @@ export default function SearchScreen() {
   const [country, setCountry] = useState<string | null>(null);
   const [city, setCity] = useState('');
   const [onlyNoDefects, setOnlyNoDefects] = useState(false);
-  const [onlyClassic, setOnlyClassic] = useState(false);
+  const [onlyClassic, setOnlyClassic] = useState(params.special === 'classic');
+  const [onlyMotorsport, setOnlyMotorsport] = useState(params.special === 'motorsport');
   const [onlyWhole, setOnlyWhole] = useState(false);
   const [delivery, setDelivery] = useState(true);
   const [pickup, setPickup] = useState(true);
@@ -63,14 +66,25 @@ export default function SearchScreen() {
   };
 
   // Parameters arrive again when the user searches from the home screen.
-  const [seenParams, setSeenParams] = useState({ q: params.q, type: params.type });
-  if (seenParams.q !== params.q || seenParams.type !== params.type) {
-    setSeenParams({ q: params.q, type: params.type });
+  const [seenParams, setSeenParams] = useState({ q: params.q, type: params.type, special: params.special });
+  if (seenParams.q !== params.q || seenParams.type !== params.type || seenParams.special !== params.special) {
+    setSeenParams({ q: params.q, type: params.type, special: params.special });
+    if (params.special !== undefined) {
+      setOnlyClassic(params.special === 'classic');
+      setOnlyMotorsport(params.special === 'motorsport');
+    }
     if (params.q !== undefined) setQuery(params.q);
     if (params.type !== undefined) setType((params.type as VehicleType) || null);
   }
 
   const countries = useMemo(() => Array.from(new Set(listings.map((l) => l.country))).sort(), [listings]);
+  // Once the listings are known, start in the visitor's own country if there is anything to show there.
+  const [home] = useState(detectCountry);
+  const [suggested, setSuggested] = useState(false);
+  if (!suggested && countries.length > 0) {
+    setSuggested(true);
+    if (home && countries.includes(home) && country === null) setCountry(home);
+  }
 
   const results = useMemo(() => {
     const q = normalize(query);
@@ -82,6 +96,7 @@ export default function SearchScreen() {
       if (c && !normalize(l.city).includes(c)) return false;
       if (onlyNoDefects && l.defects.length > 0) return false;
       if (onlyClassic && !l.classic) return false;
+      if (onlyMotorsport && !l.motorsport) return false;
       if (onlyWhole && !l.wholeVehicle) return false;
       if (onlyMyCar && myCar && !fitsCar(`${l.fits} ${l.title}`, myCar.make, myCar.model)) return false;
       if ((l.status ?? 'active') !== 'active') return false;
@@ -94,7 +109,7 @@ export default function SearchScreen() {
       if (sort === 'place') return `${a.country} ${a.city}`.localeCompare(`${b.country} ${b.city}`, 'lt');
       return totalPrice(a) - totalPrice(b);
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort]);
+  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort]);
 
   return (
     <Page>
@@ -154,9 +169,30 @@ export default function SearchScreen() {
           <Muted>Automobilis saugomas tik šiame įrenginyje. Tinkamumą tikriname pagal pardavėjo įrašytą tekstą „Kam tinka“, todėl prieš pirkdami sutikrinkite dalies numerį.</Muted>
         </Card>
       ) : null}
+      <Card>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>Ieškoti tik šioje vietoje</Text>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Šalis</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Chip label="Visos" selected={country === null} onPress={() => setCountry(null)} />
+          {countries.map((c) => (
+            <Chip key={c} label={c} selected={country === c} onPress={() => setCountry(c)} />
+          ))}
+        </View>
+        {home && country === home ? <Muted>Pagal jūsų vietą parinkta šalis. Kitų šalių skelbimus matysite pasirinkę „Visos“.</Muted> : null}
+        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Miestas</Text>
+        <TextInput
+          accessibilityLabel="Miestas"
+          placeholder="Pvz., Kaunas"
+          placeholderTextColor={colors.muted}
+          value={city}
+          onChangeText={setCity}
+          style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
+        />
+      </Card>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Chip label={showFilters ? 'Slėpti filtrus' : 'Vieta, gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
-        <Chip label="Istoriniai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
+        <Chip label={showFilters ? 'Slėpti filtrus' : 'Gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
+        <Chip label="Senoviniai automobiliai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
+        <Chip label="Automotosportas" selected={onlyMotorsport} onPress={() => setOnlyMotorsport((v) => !v)} />
         <Chip label="Visas automobilis" selected={onlyWhole} onPress={() => setOnlyWhole((v) => !v)} />
         <Chip icon="view-grid-outline" label="Visi" selected={type === null} onPress={() => setType(null)} />
         {TYPES.map((t) => (
@@ -166,22 +202,6 @@ export default function SearchScreen() {
 
       {showFilters ? (
         <Card>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Šalis</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Chip label="Visos" selected={country === null} onPress={() => setCountry(null)} />
-            {countries.map((c) => (
-              <Chip key={c} label={c} selected={country === c} onPress={() => setCountry(c)} />
-            ))}
-          </View>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Miestas</Text>
-          <TextInput
-            accessibilityLabel="Miestas"
-            placeholder="Pvz., Kaunas"
-            placeholderTextColor={colors.muted}
-            value={city}
-            onChangeText={setCity}
-            style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
-          />
           <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Kaip gausite dalį</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <Chip label="Pristatymas" selected={delivery} onPress={() => setDelivery((v) => !v)} />

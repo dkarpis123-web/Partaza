@@ -1,12 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { Button, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { normalizePhone } from '@/services/phone';
 import { ALREADY_REGISTERED, useStore } from '@/store';
 import { colors, radius } from '@/theme';
 import type { SellerKind } from '@/types';
+import { Text } from '@/components/Text';
 
 const OPTIONS: { kind: SellerKind; title: string; text: string }[] = [
   { kind: 'private', title: 'Privatus asmuo', text: 'Parduodu savo ar atliekamas dalis.' },

@@ -74,6 +74,8 @@ interface Store extends State {
   signIn: (email: string, password: string) => Result;
   signOut: () => Result;
   setKind: (kind: SellerKind) => Result;
+  /** Sets the seller's own photo or logo from a picked image; null removes it. */
+  setLogo: (uri: string | null) => Result;
   addListing: (draft: ListingDraft) => Promise<{ id?: string; error?: string }>;
   updateListing: (listingId: string, draft: ListingDraft) => Result;
   addDonor: (name: string, vin: string, cost: number) => Promise<{ id?: string; error?: string }>;
@@ -151,7 +153,7 @@ type Row = Record<string, any>;
 
 function toUser(row: Row): User {
   const year = row.created_at ? new Date(row.created_at).getFullYear() : '';
-  return { id: row.id, name: row.name, kind: row.kind === 'business' ? 'business' : 'private', rating: 0, reviews: 0, since: year ? `${year} m.` : '' };
+  return { id: row.id, name: row.name, kind: row.kind === 'business' ? 'business' : 'private', rating: 0, reviews: 0, since: year ? `${year} m.` : '', logo: row.logo_url ?? null };
 }
 
 function toListing(row: Row): Listing {
@@ -160,7 +162,7 @@ function toListing(row: Row): Listing {
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: row.country, shipping: row.shipping === null ? null : Number(row.shipping),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
-    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
+    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
   };
 }
 
@@ -594,6 +596,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
+    const setLogo: Store['setLogo'] = async (uri) => {
+      const { me } = stateRef.current;
+      let logo = uri;
+      if (supabase && uri) {
+        const uploaded = await uploadPhotos([uri], me.id);
+        if (!uploaded.urls) return uploaded.error ?? 'Nepavyko įkelti nuotraukos. Patikrinkite interneto ryšį ir bandykite dar kartą.';
+        logo = uploaded.urls[0];
+      }
+      if (supabase) {
+        const { error } = await supabase.from('profiles').update({ logo_url: logo }).eq('id', me.id);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, me: { ...s.me, logo }, users: s.users.map((u) => (u.id === s.me.id ? { ...u, logo } : u)) }));
+      return null;
+    };
+
     const addListing: Store['addListing'] = async (draft) => {
       const { me } = stateRef.current;
       if (!supabase) {
@@ -611,7 +629,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
           defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
-          classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
+          classic: !!draft.classic, motorsport: !!draft.motorsport, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
         })
         .select()
         .single();
@@ -641,7 +659,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .update({
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
-            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle,
+            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, whole_vehicle: !!draft.wholeVehicle,
             description: draft.description ?? '',
           })
           .eq('id', listingId);
@@ -832,7 +850,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

@@ -4,6 +4,8 @@ import React from 'react';
 import type { ColorValue } from 'react-native';
 
 import { Brand } from '@/components/Brand';
+import { LangSwitch } from '@/components/LangSwitch';
+import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors } from '@/theme';
 
@@ -18,6 +20,7 @@ function icon(name: IconName) {
 }
 
 export default function TabsLayout() {
+  useLang();
   const { unreadThreadIds } = useStore();
   const unread = unreadThreadIds.length;
   return (
@@ -30,11 +33,11 @@ export default function TabsLayout() {
         headerTitleStyle: { fontWeight: '700' },
         headerRight: () => <Brand side />,
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Pradžia', headerTitle: () => <Brand />, headerRight: () => null, tabBarIcon: icon('home-outline') }} />
-      <Tabs.Screen name="search" options={{ title: 'Paieška', tabBarIcon: icon('search-outline') }} />
-      <Tabs.Screen name="sell" options={{ title: 'Parduoti', tabBarIcon: icon('add-circle-outline') }} />
-      <Tabs.Screen name="messages" options={{ title: 'Žinutės', tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `Žinutės, neskaitytų pokalbių: ${unread}` : 'Žinutės' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profilis', tabBarIcon: icon('person-outline') }} />
+      <Tabs.Screen name="index" options={{ title: tr('Pradžia'), headerTitle: () => <Brand />, headerRight: () => <LangSwitch />, tabBarIcon: icon('home-outline') }} />
+      <Tabs.Screen name="search" options={{ title: tr('Paieška'), tabBarIcon: icon('search-outline') }} />
+      <Tabs.Screen name="sell" options={{ title: tr('Parduoti'), tabBarIcon: icon('add-circle-outline') }} />
+      <Tabs.Screen name="messages" options={{ title: tr('Žinutės'), tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `${tr('Žinutės, neskaitytų pokalbių:')} ${unread}` : tr('Žinutės') }} />
+      <Tabs.Screen name="profile" options={{ title: tr('Profilis'), tabBarIcon: icon('person-outline') }} />
     </Tabs>
   );
 }

@@ -1,11 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { Button, Muted, Notice } from '@/components/ui';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, money, radius } from '@/theme';
 import { PAID_ORDER_LABELS, type Message } from '@/types';
+import { Text, TextInput } from '@/components/Text';
 
 const STATUS_TEXT: Record<NonNullable<Message['status']>, string> = {
   pending: 'Laukia atsakymo',

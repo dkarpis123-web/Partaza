@@ -1,11 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button, Card, Field, Muted, Notice, Page, Row } from '@/components/ui';
 import { type OrderStep, useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { PAID_ORDER_LABELS, type PaidOrder } from '@/types';
+import { Text } from '@/components/Text';
 
 function date(value: number | null): string {
   return value ? new Date(value).toLocaleDateString('lt-LT') : '';

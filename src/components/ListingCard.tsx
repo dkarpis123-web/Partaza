@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
 import React from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 
 import { DefectBadge } from '@/components/ui';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
 import { CONDITION_LABELS, Listing } from '@/types';
+import { Text } from '@/components/Text';
 
 export function Photo({ uri, height }: { uri?: string; height: number }) {
   if (uri) {
