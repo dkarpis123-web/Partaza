@@ -129,6 +129,10 @@ export default function ProfileScreen() {
           <Button label="Ištrinti paskyrą" kind="quiet" onPress={() => setConfirmDelete(true)} />
         </>
       )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Button label="Taisyklės" kind="quiet" onPress={() => router.push('/terms')} />
+        <Button label="Privatumo politika" kind="quiet" onPress={() => router.push('/privacy')} />
+      </View>
     </Page>
   );
 }

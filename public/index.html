@@ -38,12 +38,80 @@
         height: 100%;
         flex: 1;
       }
+      /* Shown instantly, before the app's code has loaded, so the screen is never blank.
+         The app removes it and fades into the content once it is ready. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #15181c;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      #boot .word {
+        color: #fff;
+        font-size: 44px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        line-height: 1.2;
+        animation: boot-rise 0.42s cubic-bezier(0.33, 1, 0.68, 1) both;
+      }
+      #boot .track {
+        position: relative;
+        width: 150px;
+        height: 4px;
+        margin-top: 10px;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      #boot .line {
+        position: absolute;
+        inset: 0;
+        border-radius: 2px;
+        background-color: #c2410c;
+        transform-origin: left center;
+        animation: boot-draw 0.42s 0.3s cubic-bezier(0.33, 1, 0.68, 1) both, boot-pulse 1.4s 1s ease-in-out infinite;
+      }
+      #boot .tag {
+        margin-top: 14px;
+        color: #c9ced6;
+        font-size: 15px;
+        animation: boot-fade 0.42s 0.3s ease-out both;
+      }
+      @keyframes boot-rise {
+        from { opacity: 0; transform: translateY(18px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes boot-draw {
+        from { transform: scaleX(0); }
+        to { transform: scaleX(1); }
+      }
+      @keyframes boot-fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      /* While the code is still loading the line gently pulses, so it is clear something is happening. */
+      @keyframes boot-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .word, #boot .line, #boot .tag { animation: none; }
+      }
     </style>
   </head>
 
   <body>
     <!-- Use static rendering with Expo Router to support running without JavaScript. -->
     <noscript><p style="color: #fff; font-family: sans-serif; padding: 24px">Kad „Partaza“ veiktų, naršyklėje įjunkite „JavaScript“.</p></noscript>
+    <div id="boot" aria-hidden="true">
+      <div class="word">Partaza</div>
+      <div class="track"><div class="line"></div></div>
+      <div class="tag">Dalys visam transportui</div>
+    </div>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
   </body>

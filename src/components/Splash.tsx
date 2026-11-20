@@ -1,39 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/theme';
 
-const native = Platform.OS !== 'web';
+const web = Platform.OS === 'web';
 
 /**
  * Opening animation: the name rises into place, an accent line draws itself under it,
- * then the whole cover fades away to reveal the app. Takes about 1.6 s and never blocks
- * touches. People who asked their device for reduced motion get a short plain fade.
+ * then the cover fades away to reveal the app. It never blocks touches.
+ *
+ * On the web the same picture is already on screen before any code has loaded (see
+ * public/index.html, #boot), so the wait is never a blank screen; here we only take over
+ * from it and fade out. In the phone apps this component plays the whole animation.
+ * People who asked their device for reduced motion get a short plain fade.
  */
 export function Splash() {
   const [done, setDone] = useState(false);
-  const [word] = useState(() => new Animated.Value(0));
-  const [line] = useState(() => new Animated.Value(0));
-  const [tagline] = useState(() => new Animated.Value(0));
+  const [word] = useState(() => new Animated.Value(web ? 1 : 0));
+  const [line] = useState(() => new Animated.Value(web ? 1 : 0));
+  const [tagline] = useState(() => new Animated.Value(web ? 1 : 0));
   const [cover] = useState(() => new Animated.Value(1));
+
+  // Take over from the static picture in the page the moment this cover is on screen.
+  useLayoutEffect(() => {
+    if (web) document.getElementById('boot')?.remove();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const step = (value: Animated.Value, toValue: number, duration: number) =>
-      Animated.timing(value, { toValue, duration, easing: Easing.out(Easing.cubic), useNativeDriver: native });
+      Animated.timing(value, { toValue, duration, easing: Easing.out(Easing.cubic), useNativeDriver: !web });
 
     AccessibilityInfo.isReduceMotionEnabled()
       .catch(() => false)
       .then((reduce) => {
         if (cancelled) return;
-        const animation = reduce
-          ? Animated.sequence([step(word, 1, 1), step(line, 1, 1), step(tagline, 1, 1), Animated.delay(500), step(cover, 0, 250)])
-          : Animated.sequence([
-              step(word, 1, 420),
-              Animated.parallel([step(line, 1, 420), step(tagline, 1, 420)]),
-              Animated.delay(380),
-              step(cover, 0, 360),
-            ]);
+        const animation = web
+          ? Animated.sequence([Animated.delay(reduce ? 0 : 200), step(cover, 0, reduce ? 150 : 300)])
+          : reduce
+            ? Animated.sequence([step(word, 1, 1), step(line, 1, 1), step(tagline, 1, 1), Animated.delay(500), step(cover, 0, 250)])
+            : Animated.sequence([
+                step(word, 1, 420),
+                Animated.parallel([step(line, 1, 420), step(tagline, 1, 420)]),
+                Animated.delay(380),
+                step(cover, 0, 360),
+              ]);
         animation.start(() => {
           if (!cancelled) setDone(true);
         });
@@ -52,7 +63,7 @@ export function Splash() {
       importantForAccessibility="no-hide-descendants"
       style={[StyleSheet.absoluteFill, { backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', opacity: cover, zIndex: 10 }]}>
       <Animated.View style={{ opacity: word, transform: [{ translateY: word.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }}>
-        <Text style={{ fontSize: 44, fontWeight: '800', letterSpacing: -1, color: '#FFFFFF' }}>Partaza</Text>
+        <Text style={{ fontSize: 44, lineHeight: 53, fontWeight: '800', letterSpacing: -1, color: '#FFFFFF' }}>Partaza</Text>
       </Animated.View>
       <View style={{ width: 150, height: 4, marginTop: 10, alignItems: 'flex-start' }}>
         <Animated.View style={{ width: 150, height: 4, borderRadius: 2, backgroundColor: colors.accent, transform: [{ scaleX: line }] }} />

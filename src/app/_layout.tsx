@@ -27,6 +27,8 @@ export default function RootLayout() {
         <Stack.Screen name="register" options={{ title: 'Registracija' }} />
         <Stack.Screen name="dashboard" options={{ title: 'Mano prekyba' }} />
         <Stack.Screen name="reset" options={{ title: 'Slaptažodis' }} />
+        <Stack.Screen name="terms" options={{ title: 'Taisyklės' }} />
+        <Stack.Screen name="privacy" options={{ title: 'Privatumas' }} />
       </Stack>
       <AuthLinkHandler />
       <Splash />

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Button, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { normalizePhone } from '@/services/phone';
@@ -102,6 +102,15 @@ export default function RegisterScreen() {
           {isSignIn ? null : <Muted>El. paštą reikės patvirtinti per 15 minučių: atsiųsime laišką su nuoroda. Nepatvirtinta paskyra ištrinama savaime.</Muted>}
         </>
       ) : null}
+      {isSignIn ? null : (
+        <View style={{ gap: 2 }}>
+          <Muted>Registruodamiesi sutinkate su naudojimosi taisyklėmis ir patvirtinate, kad susipažinote su privatumo politika.</Muted>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            <Button label="Taisyklės" kind="quiet" onPress={() => router.push('/terms')} />
+            <Button label="Privatumo politika" kind="quiet" onPress={() => router.push('/privacy')} />
+          </View>
+        </View>
+      )}
       {error ? <Notice tone="warn">{error}</Notice> : null}
       {info ? <Notice>{info}</Notice> : null}
       {isSignIn ? <Button label="Pamiršau slaptažodį" kind="quiet" onPress={forgot} /> : null}
