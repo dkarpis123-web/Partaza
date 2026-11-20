@@ -436,7 +436,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
         phone_number_collection: { enabled: true },
         ...(delivery === 'shipping' ? { shipping_address_collection: { allowed_countries: EU } } : {}),
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
-        success_url: `${site}/order/${order.id}?paid=1`,
+        success_url: `${site}/payment/${order.id}?paid=1`,
         cancel_url: `${site}/listing/${listingId}`,
       },
       `checkout-${order.id}`,

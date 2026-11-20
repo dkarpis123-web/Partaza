@@ -29,7 +29,7 @@ export default function RootLayout() {
         <Stack.Screen name="register" options={{ title: 'Registracija' }} />
         <Stack.Screen name="dashboard" options={{ title: 'Mano prekyba' }} />
         <Stack.Screen name="buy/[id]" options={{ title: 'Pirkimas' }} />
-        <Stack.Screen name="order/[id]" options={{ title: 'Užsakymas' }} />
+        <Stack.Screen name="payment/[id]" options={{ title: 'Užsakymas' }} />
         <Stack.Screen name="payouts" options={{ title: 'Mokėjimai ir išmokos' }} />
         <Stack.Screen name="reset" options={{ title: 'Slaptažodis' }} />
         <Stack.Screen name="terms" options={{ title: 'Taisyklės' }} />

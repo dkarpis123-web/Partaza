@@ -118,7 +118,7 @@ export interface Thread {
 /** What the seller fills in; the id, seller and date are added when it is published. */
 export type ListingDraft = Omit<Listing, 'id' | 'sellerId' | 'createdAt' | 'status' | 'soldPrice'>;
 
-export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'received' | 'completed' | 'disputed' | 'refunded' | 'cancelled';
+export type PaidOrderStatus = 'pending' | 'paid' | 'shipped' | 'received' | 'completed' | 'disputed' | 'refunded' | 'cancelled';
 
 export interface ShipTo {
   name?: string | null;
@@ -127,7 +127,7 @@ export interface ShipTo {
 }
 
 /** A purchase paid through the platform. Amounts are in euros. Visible only to its buyer and seller. */
-export interface Order {
+export interface PaidOrder {
   id: string;
   listingId: string | null;
   buyerId: string;
@@ -138,7 +138,7 @@ export interface Order {
   feeAmount: number;
   total: number;
   delivery: 'shipping' | 'pickup';
-  status: OrderStatus;
+  status: PaidOrderStatus;
   shipTo: ShipTo | null;
   tracking: string;
   disputeReason: string;
@@ -150,7 +150,7 @@ export interface Order {
   releaseAt: number | null;
 }
 
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+export const PAID_ORDER_LABELS: Record<PaidOrderStatus, string> = {
   pending: 'Laukiama apmokėjimo',
   paid: 'Apmokėta – laukiama išsiuntimo',
   shipped: 'Išsiųsta',

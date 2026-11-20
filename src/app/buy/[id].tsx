@@ -7,7 +7,7 @@ import { openExternal } from '@/services/open';
 import { useStore } from '@/store';
 import { buyerFee, colors, money } from '@/theme';
 
-/** Order summary before the buyer is sent to the payment page. */
+/** PaidOrder summary before the buyer is sent to the payment page. */
 export default function BuyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function BuyScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  if (!listing || listing.status === 'sold') {
+  if (!listing || (listing.status ?? 'active') !== 'active') {
     return (
       <Page>
         <Muted>{ready ? 'Šio skelbimo neberandame. Gali būti, kad dalis jau parduota.' : 'Kraunama…'}</Muted>

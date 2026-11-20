@@ -5,13 +5,13 @@ import { Text, View } from 'react-native';
 import { Button, Card, Field, Muted, Notice, Page, Row } from '@/components/ui';
 import { type OrderStep, useStore } from '@/store';
 import { colors, money } from '@/theme';
-import { ORDER_STATUS_LABELS, type Order } from '@/types';
+import { PAID_ORDER_LABELS, type PaidOrder } from '@/types';
 
 function date(value: number | null): string {
   return value ? new Date(value).toLocaleDateString('lt-LT') : '';
 }
 
-function addressLines(order: Order): string[] {
+function addressLines(order: PaidOrder): string[] {
   const to = order.shipTo;
   if (!to) return [];
   const a = to.address;
@@ -26,8 +26,8 @@ function addressLines(order: Order): string[] {
 export default function OrderScreen() {
   const { id, paid } = useLocalSearchParams<{ id: string; paid?: string }>();
   const router = useRouter();
-  const { orderById, userById, me, ready, registered, syncOrder, orderStep, openThread } = useStore();
-  const order = orderById(id);
+  const { paidOrderById, userById, me, ready, registered, syncOrder, orderStep, openThread } = useStore();
+  const order = paidOrderById(id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
@@ -78,7 +78,7 @@ export default function OrderScreen() {
     router.push(opened.id ? `/chat/${opened.id}` : '/messages');
   };
 
-  const explain: Record<Order['status'], string> = {
+  const explain: Record<PaidOrder['status'], string> = {
     pending: 'Mokėjimas dar nepatvirtintas. Jei ką tik sumokėjote, palaukite kelias sekundes.',
     paid: buyer
       ? `Apmokėta. Pinigai laikomi, kol gausite dalį. Pardavėjas turi ją ${pickup ? 'perduoti' : 'išsiųsti'}; jei to nepadarys per 7 dienas, galėsite atšaukti ir atgauti pinigus.`
@@ -103,7 +103,7 @@ export default function OrderScreen() {
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{order.title}</Text>
       <Muted>{buyer ? 'Pardavėjas' : 'Pirkėjas'}: {other.name}</Muted>
       <Notice tone={order.status === 'disputed' || order.status === 'cancelled' ? 'warn' : 'ok'}>
-        {ORDER_STATUS_LABELS[order.status]}. {explain[order.status]}
+        {PAID_ORDER_LABELS[order.status]}. {explain[order.status]}
       </Notice>
       {note ? <Notice>{note}</Notice> : null}
 

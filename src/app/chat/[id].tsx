@@ -5,7 +5,7 @@ import { ScrollView, Text, TextInput, View } from 'react-native';
 import { Button, Muted, Notice } from '@/components/ui';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, money, radius } from '@/theme';
-import { ORDER_STATUS_LABELS, type Message } from '@/types';
+import { PAID_ORDER_LABELS, type Message } from '@/types';
 
 const STATUS_TEXT: Record<NonNullable<Message['status']>, string> = {
   pending: 'Laukia atsakymo',
@@ -17,7 +17,7 @@ const STATUS_TEXT: Record<NonNullable<Message['status']>, string> = {
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer, blockUser, markRead, payReady, orders } = useStore();
+  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer, blockUser, markRead, payReady, paidOrders } = useStore();
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,8 +41,8 @@ export default function ChatScreen() {
   const other = userById(iAmSeller ? thread.buyerId : thread.sellerId);
   const messages = thread.messages;
   const accepted = [...messages].reverse().find((m) => m.kind === 'offer' && m.status === 'accepted');
-  const canPay = live && listing.status !== 'sold' && payReady.includes(thread.sellerId);
-  const order = orders.find((o) => o.listingId === listing.id && o.buyerId === thread.buyerId && o.status !== 'refunded');
+  const canPay = live && (listing.status ?? 'active') === 'active' && payReady.includes(thread.sellerId);
+  const order = paidOrders.find((o) => o.listingId === listing.id && o.buyerId === thread.buyerId && o.status !== 'refunded');
 
   const run = async (action: Promise<string | null>) => {
     setBusy(true);
@@ -118,7 +118,7 @@ export default function ChatScreen() {
             );
           })}
           {order ? (
-            <Button label={`Užsakymas: ${ORDER_STATUS_LABELS[order.status].toLowerCase()}`} kind="outline" onPress={() => router.push(`/order/${order.id}`)} />
+            <Button label={`Užsakymas: ${PAID_ORDER_LABELS[order.status].toLowerCase()}`} kind="outline" onPress={() => router.push(`/payment/${order.id}`)} />
           ) : accepted ? (
             canPay ? (
               iAmSeller ? (

@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
-import type { Donor, Listing, ListingDraft, Message, MyCar, Order, SellerKind, Thread, User } from '@/types';
+import type { Donor, Listing, ListingDraft, Message, MyCar, PaidOrder, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -28,7 +28,7 @@ interface State {
   /** The signed-in person's own phone number; '' when not given yet. Never shown to others. */
   phone: string;
   /** The signed-in person's purchases and sales paid through the platform. */
-  orders: Order[];
+  paidOrders: PaidOrder[];
   /** Ids of sellers who can take payments through the platform. */
   payReady: string[];
 }
@@ -87,7 +87,7 @@ interface Store extends State {
   payoutStatus: () => Promise<PayoutStatus>;
   /** Resolves to the address where the seller sets up (or manages) payouts. */
   startPayouts: () => Promise<{ url?: string; error?: string }>;
-  orderById: (id: string) => Order | undefined;
+  paidOrderById: (id: string) => PaidOrder | undefined;
   deleteAccount: () => Result;
   refresh: () => Promise<void>;
   userById: (id: string) => User;
@@ -102,8 +102,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], payReady: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], payReady: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], paidOrders: [], payReady: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], paidOrders: [], payReady: [] };
 }
 
 let counter = 0;
@@ -174,7 +174,7 @@ function toThread(row: Row): Thread {
   return { id: row.id, listingId: row.listing_id, buyerId: row.buyer_id, sellerId: row.seller_id, messages };
 }
 
-function toOrder(row: Row): Order {
+function toPaidOrder(row: Row): PaidOrder {
   const time = (value: string | null) => (value ? new Date(value).getTime() : null);
   return {
     id: row.id, listingId: row.listing_id ?? null, buyerId: row.buyer_id ?? '', sellerId: row.seller_id ?? '', title: row.title,
@@ -299,12 +299,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
     const threads = ((threadsRes as { data: Row[] | null }).data ?? []).map(toThread);
     // Payments: who can be paid through the platform (public), and my own orders.
-    const [readyRes, ordersRes] = await Promise.all([
+    const [readyRes, paidRes] = await Promise.all([
       supabase.from('seller_accounts').select('seller_id').eq('payouts_ready', true),
       uid ? supabase.from('payment_orders').select('*').neq('status', 'cancelled').order('created_at', { ascending: false }) : Promise.resolve({ data: [] as Row[] }),
     ]);
     const payReady = (readyRes.data ?? []).map((r: Row) => r.seller_id as string);
-    const orders = ((ordersRes as { data: Row[] | null }).data ?? []).map(toOrder);
+    const paidOrders = ((paidRes as { data: Row[] | null }).data ?? []).map(toPaidOrder);
 
     const ids = new Set<string>();
     listings.forEach((l) => ids.add(l.sellerId));
@@ -313,7 +313,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ids.add(t.buyerId);
       ids.add(t.sellerId);
     });
-    orders.forEach((o) => {
+    paidOrders.forEach((o) => {
       if (o.buyerId) ids.add(o.buyerId);
       if (o.sellerId) ids.add(o.sellerId);
     });
@@ -322,7 +322,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, orders, payReady });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, paidOrders, payReady });
   }, []);
 
   useEffect(() => {
@@ -793,7 +793,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       userById: (id) => (id === state.me.id ? state.me : state.users.find((u) => u.id === id) ?? UNKNOWN),
       listingById: (id) => state.listings.find((l) => l.id === id),
       threadById: (id) => state.threads.find((t) => t.id === id),
-      orderById: (id) => state.orders.find((o) => o.id === id),
+      paidOrderById: (id) => state.paidOrders.find((o) => o.id === id),
       threadForListing: (listingId) => state.threads.find((t) => t.listingId === listingId && t.buyerId === state.me.id),
     }),
     [state, actions, refresh, myCar, setMyCar, unreadThreadIds, markRead],

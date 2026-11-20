@@ -44,7 +44,7 @@ export default function ListingScreen() {
   const mine = listing.sellerId === me.id;
   const hasDefects = listing.defects.length > 0;
   // Paying through the platform is offered only when the seller has set up payouts.
-  const canBuy = live && listing.status !== 'sold' && payReady.includes(listing.sellerId);
+  const canBuy = live && (listing.status ?? 'active') === 'active' && payReady.includes(listing.sellerId);
 
   const openChat = async () => {
     if (live && !registered) return router.push('/register');

@@ -9,11 +9,11 @@ import { normalizePhone } from '@/services/phone';
 import { STALE_DAYS, staleListings } from '@/services/stats';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, money } from '@/theme';
-import { ORDER_STATUS_LABELS } from '@/types';
+import { PAID_ORDER_LABELS } from '@/types';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, orders, payReady, userById } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, paidOrders, payReady, userById } = useStore();
   const saved = listings.filter((l) => favorites.includes(l.id) && l.status !== 'sold');
   const [now] = useState(() => Date.now());
   const stale = staleListings(listings, me.id, now);
@@ -85,10 +85,10 @@ export default function ProfileScreen() {
         </Card>
       ) : null}
 
-      {orders.length > 0 ? (
+      {paidOrders.length > 0 ? (
         <Card>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Užsakymai ({orders.length})</Text>
-          {orders.map((o) => {
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Apmokėti užsakymai ({paidOrders.length})</Text>
+          {paidOrders.map((o) => {
             const bought = o.buyerId === me.id;
             const needsMe = bought ? o.status === 'shipped' || o.status === 'received' : o.status === 'paid';
             return (
@@ -96,8 +96,8 @@ export default function ProfileScreen() {
                 <Text style={{ fontSize: 14, fontWeight: needsMe ? '700' : '400', color: colors.ink }}>
                   {bought ? 'Pirkau' : 'Pardaviau'}: {o.title} · {money(bought ? o.total : o.itemAmount + o.shippingAmount)}
                 </Text>
-                <Muted>{ORDER_STATUS_LABELS[o.status]} · {bought ? 'pardavėjas' : 'pirkėjas'} {userById(bought ? o.sellerId : o.buyerId).name}{needsMe ? ' · laukia jūsų veiksmo' : ''}</Muted>
-                <Button label="Atidaryti užsakymą" kind={needsMe ? 'primary' : 'outline'} onPress={() => router.push(`/order/${o.id}`)} />
+                <Muted>{PAID_ORDER_LABELS[o.status]} · {bought ? 'pardavėjas' : 'pirkėjas'} {userById(bought ? o.sellerId : o.buyerId).name}{needsMe ? ' · laukia jūsų veiksmo' : ''}</Muted>
+                <Button label="Atidaryti užsakymą" kind={needsMe ? 'primary' : 'outline'} onPress={() => router.push(`/payment/${o.id}`)} />
               </View>
             );
           })}
