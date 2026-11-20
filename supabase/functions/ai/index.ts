@@ -297,7 +297,8 @@ async function shipping(body: Json): Promise<Json> {
         input_schema: {
           type: 'object',
           properties: {
-            found: { type: 'boolean', description: 'false if no usable carrier prices for this route were found.' },
+            found: { type: 'boolean', description: 'true whenever you can give an estimate (from carrier pages found or, failing that, from typical published tariffs); false only if the part cannot be identified at all.' },
+            confirmed: { type: 'boolean', description: 'true if the prices come from carrier or post pages returned by the search; false if they are your estimate from typical tariffs.' },
             weight_kg: { type: 'number', description: 'Estimated weight of the packed part in kg.' },
             size_cm: { type: 'string', description: 'Estimated packed size, e.g. "60 x 40 x 30".' },
             low: { type: 'number', description: 'Cheapest suitable service in EUR.' },
@@ -309,7 +310,7 @@ async function shipping(body: Json): Promise<Json> {
               description: 'Carrier or post price pages used (at most 4). Only pages returned by the search.',
             },
           },
-          required: ['found', 'note', 'sources'],
+          required: ['found', 'confirmed', 'note', 'sources'],
         },
       },
     ],
@@ -320,11 +321,13 @@ async function shipping(body: Json): Promise<Json> {
         `From country: ${from}\nTo country: ${to}\n\n` +
         `First estimate the weight and packed size of this part (search for the part if you are unsure). Then search for current parcel prices for that weight and size ` +
         `from ${from} to ${to}: the national post of ${from} and parcel carriers or parcel lockers that serve this route. Prices in EUR. ` +
-        `Then call the report_shipping tool exactly once (do not answer in plain text). If you find no carrier prices for this route, set found to false rather than guess.`,
+        `If the search gives no usable price page, still give your best estimate from the typical tariffs of these carriers for that weight and size, set confirmed to false and say in the note that the price was not confirmed online. ` +
+        `The buyer needs a rough figure, so always give low and high unless the part cannot be identified at all. Then call the report_shipping tool exactly once (do not answer in plain text).`,
     }],
   });
   const blocks: Json[] = result.content ?? [];
   const found = toolInput(result, 'report_shipping');
+  console.log('ai shipping', from, to, result.stop_reason, JSON.stringify(found).slice(0, 300));
   if (found.found !== true || !(Number(found.low) > 0)) return { found: false, note: text(found.note, 400) };
   const seen = new Set<string>();
   for (const block of blocks) {
@@ -333,6 +336,7 @@ async function shipping(body: Json): Promise<Json> {
   const low = Number(found.low);
   return {
     found: true,
+    confirmed: found.confirmed === true,
     low,
     high: Number(found.high) >= low ? Number(found.high) : low,
     weight_kg: Number(found.weight_kg) > 0 ? Number(found.weight_kg) : null,
