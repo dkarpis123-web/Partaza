@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "partaza",
+    "name": "Partaza",
     "slug": "partaza",
-    "version": "1.0.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#15181C",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -19,7 +19,21 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Partaza naudoja kamerą dalies nuotraukoms skelbime.",
+          "photosPermission": "Partaza naudoja nuotraukas dalies skelbimui.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "scheme": "partaza"
   }
 }

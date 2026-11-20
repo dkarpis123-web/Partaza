@@ -1,0 +1,137 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { ScrollView, Text, TextInput, View } from 'react-native';
+
+import { Button, Muted, Notice } from '@/components/ui';
+import { useStore } from '@/store';
+import { MAX_WIDTH, colors, money, radius } from '@/theme';
+import type { Message } from '@/types';
+
+const STATUS_TEXT: Record<NonNullable<Message['status']>, string> = {
+  pending: 'Laukia atsakymo',
+  accepted: 'Priimta',
+  declined: 'Atmesta',
+  countered: 'Pateiktas kitas pasiūlymas',
+};
+
+export default function ChatScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { listingById, userById, threadById, me, live, ready, sendText, answerOffer } = useStore();
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const thread = threadById(id);
+  const listing = thread ? listingById(thread.listingId) : undefined;
+
+  if (!thread || !listing) {
+    return (
+      <View style={{ padding: 16 }}>
+        <Muted>{ready ? 'Šio pokalbio neberandame.' : 'Kraunama…'}</Muted>
+      </View>
+    );
+  }
+
+  const iAmSeller = thread.sellerId === me.id;
+  const other = userById(iAmSeller ? thread.buyerId : thread.sellerId);
+  const messages = thread.messages;
+  const accepted = messages.find((m) => m.kind === 'offer' && m.status === 'accepted');
+
+  const run = async (action: Promise<string | null>) => {
+    setBusy(true);
+    const problem = await action;
+    setBusy(false);
+    setError(problem ?? '');
+    return problem === null;
+  };
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value || busy) return;
+    if (await run(sendText(thread.id, value))) setText('');
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center' }}>
+      <View style={{ flex: 1, width: '100%', maxWidth: MAX_WIDTH }}>
+        <View style={{ padding: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 2 }}>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>{other.name}{iAmSeller ? ' · pirkėjas' : ''}</Text>
+          <Text style={{ fontSize: 13, color: colors.muted }}>{listing.title} · {money(listing.price)}</Text>
+        </View>
+
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+          {messages.length === 0 ? <Muted>{iAmSeller ? 'Pirkėjas dar nieko neparašė.' : 'Parašykite pardavėjui arba pasiūlykite savo kainą.'}</Muted> : null}
+          {messages.map((m) => {
+            const mine = m.senderId === me.id;
+            if (m.kind === 'text') {
+              return (
+                <View
+                  key={m.id}
+                  style={{
+                    alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: 300, padding: 12, borderRadius: 16,
+                    backgroundColor: mine ? colors.ink : colors.surface, borderWidth: mine ? 0 : 1, borderColor: colors.border,
+                  }}>
+                  <Text style={{ fontSize: 14, lineHeight: 20, color: mine ? '#FFFFFF' : colors.ink }}>{m.text}</Text>
+                </View>
+              );
+            }
+            const canAnswer = !mine && m.status === 'pending';
+            return (
+              <View
+                key={m.id}
+                style={{
+                  alignSelf: mine ? 'flex-end' : 'flex-start', width: 290, maxWidth: '100%', padding: 14, borderRadius: 16, gap: 8,
+                  backgroundColor: mine ? colors.ink : colors.surface,
+                  borderWidth: mine ? 0 : 2, borderColor: colors.accent,
+                }}>
+                <Text style={{ fontSize: 12, color: mine ? '#C9CED6' : colors.muted }}>{mine ? 'Jūsų pasiūlymas' : m.senderId === thread.sellerId ? 'Pardavėjo pasiūlymas' : 'Pirkėjo pasiūlymas'}</Text>
+                <Text style={{ fontSize: 26, fontWeight: '700', color: mine ? '#FFFFFF' : colors.ink }}>{money(m.amount ?? 0)}</Text>
+                {m.text ? <Text style={{ fontSize: 14, color: mine ? '#FFFFFF' : colors.ink }}>{m.text}</Text> : null}
+                {m.status ? <Text style={{ fontSize: 12, fontWeight: '600', color: mine ? '#C9CED6' : colors.muted }}>{STATUS_TEXT[m.status]}</Text> : null}
+                {canAnswer ? (
+                  <View style={{ gap: 8 }}>
+                    <Button
+                      label={`Priimti ${money(m.amount ?? 0)}`}
+                      disabled={busy}
+                      onPress={() => run(answerOffer(thread.id, m.id, 'accepted'))}
+                    />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Button label="Siūlyti kitą" kind="outline" onPress={() => router.push(`/offer/${listing.id}?thread=${thread.id}`)} style={{ flex: 1 }} />
+                      <Button
+                        label="Atmesti"
+                        kind="outline"
+                        disabled={busy}
+                        onPress={() => run(answerOffer(thread.id, m.id, 'declined'))}
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+          {accepted ? (
+            <Notice>
+              Sutarta kaina: {money(accepted.amount ?? 0)}. Mokėjimas per programėlę su pirkėjo apsauga bus prijungtas vėlesniame etape. Kol kas dėl atsiskaitymo ir atsiėmimo susitarkite žinutėmis.
+            </Notice>
+          ) : null}
+          {error ? <Notice tone="warn">{error}</Notice> : null}
+          {live ? null : <Muted>Bandomasis režimas: pokalbis lieka tik šiame įrenginyje.</Muted>}
+        </ScrollView>
+
+        <View style={{ flexDirection: 'row', gap: 8, padding: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <TextInput
+            accessibilityLabel="Žinutė"
+            placeholder="Rašyti žinutę"
+            placeholderTextColor={colors.muted}
+            value={text}
+            onChangeText={setText}
+            onSubmitEditing={send}
+            style={{ flex: 1, minHeight: 48, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, backgroundColor: colors.bg, fontSize: 15, color: colors.ink }}
+          />
+          <Button label="Siųsti" kind="dark" onPress={send} disabled={!text.trim() || busy} />
+        </View>
+      </View>
+    </View>
+  );
+}
