@@ -6,11 +6,28 @@ import { Platform, View } from 'react-native';
 import { AuthLinkHandler } from '@/components/AuthLinkHandler';
 import { BackButton } from '@/components/BackButton';
 import { Brand } from '@/components/Brand';
-import { LangSwitch } from '@/components/LangSwitch';
+import { HeaderRight } from '@/components/HeaderRight';
 import { Splash } from '@/components/Splash';
 import { startLang, tr, useLang } from '@/i18n';
 import { StoreProvider } from '@/store';
 import { colors } from '@/theme';
+
+/** Screen names shown on the right of the header (in Lithuanian; translated when shown). */
+const TITLES: Record<string, string> = {
+  'listing/[id]': 'Skelbimas',
+  'offer/[id]': 'Siūlyti kainą',
+  'chat/[id]': 'Pokalbis',
+  'sell/review': 'Patikrinkite skelbimą',
+  'register': 'Registracija',
+  'dashboard': 'Mano prekyba',
+  'buy/[id]': 'Pirkimas',
+  'payment/[id]': 'Užsakymas',
+  'payouts': 'Mokėjimai ir išmokos',
+  'orders': 'Užsakymai',
+  'reset': 'Slaptažodis',
+  'terms': 'Taisyklės',
+  'privacy': 'Privatumas',
+};
 
 export default function RootLayout() {
   useLang();
@@ -19,7 +36,7 @@ export default function RootLayout() {
     <StoreProvider>
       <StatusBar style="dark" />
       <Stack
-        screenOptions={{
+        screenOptions={({ route }) => ({
           headerTintColor: colors.ink,
           headerStyle: { backgroundColor: colors.surface },
           headerTitleStyle: { fontWeight: '700' },
@@ -32,9 +49,9 @@ export default function RootLayout() {
               <BackButton />
             </View>
           ),
-          headerRight: () => <LangSwitch />,
-          headerTitleAlign: 'left',
-        }}>
+          headerTitle: () => null,
+          headerRight: () => <HeaderRight title={TITLES[route.name] ?? ''} />,
+        })}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="listing/[id]" options={{ title: tr('Skelbimas') }} />
         <Stack.Screen name="offer/[id]" options={{ title: tr('Siūlyti kainą') }} />

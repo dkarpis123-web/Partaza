@@ -4,7 +4,7 @@ import React from 'react';
 import { Platform, View, type ColorValue } from 'react-native';
 
 import { Brand } from '@/components/Brand';
-import { LangSwitch } from '@/components/LangSwitch';
+import { HeaderRight } from '@/components/HeaderRight';
 import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors } from '@/theme';
@@ -19,13 +19,15 @@ function icon(name: IconName) {
   return TabIcon;
 }
 
+const TAB_TITLES: Record<string, string> = { search: 'Paieška', sell: 'Parduoti', messages: 'Žinutės', profile: 'Profilis' };
+
 export default function TabsLayout() {
   useLang();
   const { unreadThreadIds } = useStore();
   const unread = unreadThreadIds.length;
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={({ route }) => ({
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
         headerTintColor: colors.ink,
@@ -36,10 +38,10 @@ export default function TabsLayout() {
             <Brand />
           </View>
         ),
-        headerRight: () => <LangSwitch />,
-        headerTitleAlign: 'left',
-      }}>
-      <Tabs.Screen name="index" options={{ title: tr('Pradžia'), headerTitle: '', tabBarIcon: icon('home-outline') }} />
+        headerTitle: () => null,
+        headerRight: () => <HeaderRight title={TAB_TITLES[route.name] ?? ''} />,
+      })}>
+      <Tabs.Screen name="index" options={{ title: tr('Pradžia'), tabBarIcon: icon('home-outline') }} />
       <Tabs.Screen name="search" options={{ title: tr('Paieška'), tabBarIcon: icon('search-outline') }} />
       <Tabs.Screen name="sell" options={{ title: tr('Parduoti'), tabBarIcon: icon('add-circle-outline') }} />
       <Tabs.Screen name="messages" options={{ title: tr('Žinutės'), tabBarIcon: icon('chatbubble-outline'), tabBarBadge: unread > 0 ? unread : undefined, tabBarAccessibilityLabel: unread > 0 ? `${tr('Žinutės, neskaitytų pokalbių:')} ${unread}` : tr('Žinutės') }} />
