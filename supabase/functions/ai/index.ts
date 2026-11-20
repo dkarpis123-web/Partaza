@@ -256,7 +256,7 @@ async function improve(body: Json, admin: any, userId: string): Promise<Json> {
           title: { type: 'string', description: 'Clear listing title: part name, side/position if known, make and model if known. At most 90 characters.' },
           description: { type: 'string', description: 'Tidy description built only from the seller\'s own text and what is visible in the photos. Empty if there is nothing to say.' },
           oem: { type: 'string', description: 'Part number: the seller\'s, or one clearly readable in the photos. Never guess.' },
-          fits: { type: 'string', description: 'Vehicles the part fits: the seller\'s text tidied up, extended only by what is visible or follows from a readable part number.' },
+          fits: { type: 'string', description: 'Only the vehicles this part fits. Drop vehicles the seller listed that the part number, labels or the make visible in the photos rule out, or that plainly do not belong to this part. Keep the rest, tidied up; add only what is visible or follows from a readable part number.' },
           notes: { type: 'array', items: { type: 'string' }, description: 'What you changed and why, one short sentence each; also anything the seller should check or add (e.g. a number in the photo differs from the text). At most 6.' },
         },
         required: ['title', 'description', 'oem', 'fits', 'notes'],
@@ -273,7 +273,9 @@ async function improve(body: Json, admin: any, userId: string): Promise<Json> {
             `Title: ${text(listing.title, 200)}\nDescription: ${text(listing.description, 2000) || '(empty)'}\nPart number: ${text(listing.oem, 80) || '(empty)'}\n` +
             `Fits: ${text(listing.fits, 400) || '(empty)'}\nCondition: ${text(listing.condition, 20)}\nVehicle type: ${text(listing.vehicle_type, 20)}\n\n` +
             `Fix spelling and wording, make the title clear and searchable, read part numbers and labels from the photos and correct the part number and fit if the photos show otherwise. ` +
-            `Do not invent facts, do not change the meaning, do not add praise or sales talk, and keep everything the seller stated about condition and defects. ` +
+            `Remove from the title, description and fits anything that does not belong to the part shown or that the photos contradict (for example a vehicle model which the part number, labels or visible make rule out), and say in notes what you removed and why. ` +
+            `If you cannot tell whether a vehicle the seller stated is right, keep it and ask the seller in notes to check it. ` +
+            `Do not invent facts, do not add praise or sales talk, and keep everything the seller stated about condition and defects. ` +
             `Write in ${language(body.lang)}. Answer by calling the propose_listing tool exactly once (do not answer in plain text).`,
         },
       ],

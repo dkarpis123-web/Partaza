@@ -3,8 +3,11 @@ import { View } from 'react-native';
 
 import { Text } from '@/components/Text';
 import { Button, Card, Muted, Notice } from '@/components/ui';
+import { tr } from '@/i18n';
+import { WebPrices } from '@/services/ai';
+import { openExternal } from '@/services/open';
 import { ListingFix, useStore } from '@/store';
-import { colors } from '@/theme';
+import { colors, money } from '@/theme';
 import { Listing } from '@/types';
 
 const FIELDS: { key: keyof Omit<ListingFix, 'notes'>; label: string }[] = [
@@ -16,7 +19,18 @@ const FIELDS: { key: keyof Omit<ListingFix, 'notes'>; label: string }[] = [
 
 /** The seller's own listing, reviewed by AI: shows what would change and saves only what the seller confirms. */
 export function AiReview({ listing }: { listing: Listing }) {
-  const { aiImprove, applyFix } = useStore();
+  const { aiImprove, applyFix, aiPrices } = useStore();
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [prices, setPrices] = useState<WebPrices | null>(null);
+  const [priceProblem, setPriceProblem] = useState('');
+  const askPrices = async () => {
+    setPriceBusy(true);
+    setPriceProblem('');
+    const answer = await aiPrices({ title: listing.title, oem: listing.oem, fits: listing.fits, condition: listing.condition, defects: listing.defects.length > 0, country: listing.country });
+    setPriceBusy(false);
+    setPrices(answer.prices ?? null);
+    setPriceProblem(answer.error ?? '');
+  };
   const [busy, setBusy] = useState(false);
   const [fix, setFix] = useState<ListingFix | null>(null);
   const [skip, setSkip] = useState<string[]>([]);
@@ -55,6 +69,19 @@ export function AiReview({ listing }: { listing: Listing }) {
         {busy ? <Muted>DI skaito tekstą ir žiūri nuotraukas. Tai užtrunka keliolika sekundžių. Niekas nekeičiama be jūsų patvirtinimo.</Muted> : null}
         {done ? <Notice>Pakeitimai išsaugoti.</Notice> : null}
         {problem ? <Notice tone="warn">{problem}</Notice> : null}
+        <Button label={priceBusy ? 'Ieškoma kainų internete…' : 'DI kainos patarimas: ieškoti kainų internete'} kind="outline" disabled={priceBusy} onPress={askPrices} />
+        {priceBusy ? <Muted>Tai užtrunka apie pusę minutės.</Muted> : null}
+        {priceProblem ? <Notice tone="warn">{priceProblem}</Notice> : null}
+        {prices && !prices.found ? <Muted>{`${tr('Internete šios dalies kainų neradome.')} ${prices.note}`}</Muted> : null}
+        {prices?.found ? (
+          <>
+            <Notice>{`${tr('Jūsų kaina')}: ${money(listing.price)}. ${tr('Internete panašios dalys siūlomos už')} ${money(prices.low ?? 0)}–${money(prices.high ?? 0)}, ${tr('dažniausiai apie')} ${money(prices.typical ?? 0)}. ${prices.note}`}</Notice>
+            {prices.sources.map((s) => (
+              <Button key={s.url} label={`${s.title}${s.price ? ` · ${money(s.price)}` : ''}`} kind="quiet" onPress={() => openExternal(s.url)} />
+            ))}
+            <Muted>Kainą pakeisite paspaudę „Redaguoti skelbimą“.</Muted>
+          </>
+        ) : null}
       </View>
     );
   }
