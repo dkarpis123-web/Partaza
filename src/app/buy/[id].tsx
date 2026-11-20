@@ -5,7 +5,7 @@ import { Text, View } from 'react-native';
 import { Button, Card, Chip, Muted, Notice, Page, Row } from '@/components/ui';
 import { openExternal } from '@/services/open';
 import { useStore } from '@/store';
-import { colors, money } from '@/theme';
+import { buyerFee, colors, money } from '@/theme';
 
 /** Order summary before the buyer is sent to the payment page. */
 export default function BuyScreen() {
@@ -49,7 +49,8 @@ export default function BuyScreen() {
   const accepted = [...(threadForListing(listing.id)?.messages ?? [])].reverse().find((m) => m.kind === 'offer' && m.status === 'accepted');
   const price = accepted?.amount != null ? Math.min(accepted.amount, listing.price) : listing.price;
   const shipping = delivery === 'shipping' ? listing.shipping ?? 0 : 0;
-  const total = Math.round((price + shipping) * 100) / 100;
+  const fee = buyerFee(price + shipping);
+  const total = Math.round((price + shipping + fee) * 100) / 100;
   const seller = userById(listing.sellerId);
 
   const start = async () => {
@@ -79,12 +80,12 @@ export default function BuyScreen() {
       <Card style={{ gap: 0 }}>
         <Row label={accepted ? 'Sutarta kaina' : 'Kaina'} value={`${money(price)} ${listing.vat ? 'su PVM' : 'be PVM'}`} />
         <Row label={delivery === 'shipping' ? 'Pristatymas' : 'Atsiėmimas'} value={delivery === 'shipping' ? money(shipping) : `${listing.city}, nemokamai`} />
-        <Row label="Partaza mokestis" value="0 €" />
+        <Row label="Pirkėjo apsauga" value={money(fee)} />
         <Row label="Iš viso" value={money(total)} strong />
       </Card>
 
       <Notice>
-        Pinigai pardavėjui nepervedami iš karto: juos laiko mokėjimų bendrovė „Stripe“. Pardavėjas juos gaus, kai patvirtinsite, kad dalį gavote ir ji tvarkinga. Gavę dalį turite 5 dienas jai patikrinti.
+        Pinigai pardavėjui nepervedami iš karto: juos laiko mokėjimų bendrovė „Stripe“. Pardavėjas juos gaus, kai patvirtinsite, kad dalį gavote ir ji tvarkinga. Gavę dalį turite 5 dienas jai patikrinti. Pirkėjo apsaugos mokestis (4,5 % + 0,45 €) padengia saugų mokėjimą ir pinigų laikymą iki gavimo.
       </Notice>
       <Muted>
         {delivery === 'shipping'

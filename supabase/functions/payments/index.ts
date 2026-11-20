@@ -17,8 +17,13 @@
 //   STRIPE_SECRET_KEY         required; sk_test_... while testing
 //   STRIPE_WEBHOOK_SECRET     required for webhooks; whsec_...
 //   SITE_URL                  optional, default https://partaza.eu
-//   PARTAZA_FEE_PERCENT       optional, buyer fee in percent of the item price, default 0
-//   PARTAZA_FEE_FIXED_CENTS   optional, fixed buyer fee in cents, default 0
+//   PARTAZA_FEE_PERCENT       optional, buyer fee in percent of item + delivery, default 4.5
+//   PARTAZA_FEE_FIXED_CENTS   optional, fixed buyer fee in cents, default 45
+//
+// The default buyer fee is sized so that payments cost the platform nothing even in the most
+// expensive case: Stripe's card fee (1.5 % + 0.25 EUR for standard EU cards, up to
+// 3.25 % + 0.25 EUR for cards from outside Europe), the Connect payout fee (0.25 % + 0.10 EUR)
+// and 21 % VAT on the fee itself. The same numbers are in src/theme.ts (buyerFee) for display.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
@@ -42,8 +47,8 @@ const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'G
 const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
 const WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 const SITE = (Deno.env.get('SITE_URL') ?? 'https://partaza.eu').replace(/\/$/, '');
-const FEE_PERCENT = Math.max(0, Number(Deno.env.get('PARTAZA_FEE_PERCENT') ?? '0') || 0);
-const FEE_FIXED = Math.max(0, Math.round(Number(Deno.env.get('PARTAZA_FEE_FIXED_CENTS') ?? '0') || 0));
+const FEE_PERCENT = Math.max(0, Number(Deno.env.get('PARTAZA_FEE_PERCENT') ?? '4.5') || 0);
+const FEE_FIXED = Math.max(0, Math.round(Number(Deno.env.get('PARTAZA_FEE_FIXED_CENTS') ?? '45') || 0));
 
 function key(dictionaryName: string, legacyName: string): string {
   try {
@@ -236,6 +241,15 @@ async function releaseDue(admin: SupabaseClient): Promise<Response> {
     .lte('release_at', new Date().toISOString())
     .order('release_at')
     .limit(25);
+  // Payments whose buyer never came back to the site (closed the tab): confirm them with Stripe here.
+  const { data: waiting } = await admin
+    .from('payment_orders')
+    .select('*')
+    .eq('status', 'pending')
+    .lte('created_at', new Date(Date.now() - 3 * 60_000).toISOString())
+    .limit(25);
+  for (const order of waiting ?? []) await settlePending(admin, order, false).catch(() => {});
+
   let released = 0;
   for (const order of due ?? []) {
     try {
@@ -381,7 +395,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   }
   const item = Math.round(price * 100);
   const shipping = delivery === 'shipping' ? Math.round(Number(listing.shipping) * 100) : 0;
-  const fee = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round((item * FEE_PERCENT) / 100) + FEE_FIXED : 0;
+  const fee = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round(((item + shipping) * FEE_PERCENT) / 100) + FEE_FIXED : 0;
   const total = item + shipping + fee;
   if (total < 50) return { error: 'amount_too_small' };
 

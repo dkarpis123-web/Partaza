@@ -152,6 +152,8 @@ nustatę išmokas (tapatybę ir IBAN įveda „Stripe“ puslapyje).
    `STRIPE_WEBHOOK_SECRET`.
 4. Funkcija `payments` diegiama su išjungta JWT patikra (ją kviečia ir „Stripe“); naudotojo teises ji tikrina pati.
 
-Mokestis pirkėjui šiuo metu 0. Įjungiamas paslaptimis `PARTAZA_FEE_PERCENT` (pvz., `5`) ir
-`PARTAZA_FEE_FIXED_CENTS` (pvz., `70`); tada ekrane `src/app/buy/[id].tsx` reikia parodyti tą pačią sumą.
-Kol mokestis 0, „Stripe“ komisinį už kiekvieną mokėjimą sumoka platforma.
+Pirkėjo apsaugos mokestis: **4,5 % + 0,45 €** nuo dalies kainos ir pristatymo sumos (keičiamas paslaptimis
+`PARTAZA_FEE_PERCENT` ir `PARTAZA_FEE_FIXED_CENTS`; tą patį reikia įrašyti `src/theme.ts` funkcijoje `buyerFee`).
+Jis parinktas taip, kad platformai mokėjimai nieko nekainuotų net brangiausiu atveju: „Stripe“ kortelės mokestis
+(1,5 % + 0,25 € ES kortelėms, iki 3,25 % + 0,25 € ne Europos kortelėms), „Connect“ išmokos mokestis (0,25 % + 0,10 €)
+ir 21 % PVM nuo paties mokesčio. Likutis dengia 2 € per mėnesį už kiekvieną aktyvų pardavėją ir ginčų mokesčius.

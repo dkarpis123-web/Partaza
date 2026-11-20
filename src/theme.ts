@@ -27,7 +27,11 @@ export function money(value: number): string {
   return `${text} €`;
 }
 
-/** Buyer protection fee. Placeholder formula (Vinted-like); the real fee is a business decision. */
-export function buyerFee(price: number): number {
-  return Math.round((0.7 + price * 0.05) * 100) / 100;
+/**
+ * Buyer protection fee for paying through the platform: 4.5 % of item + delivery, plus 0.45 €.
+ * Sized to cover the payment provider's charges and VAT. The server charges the real amount
+ * (supabase/functions/payments, PARTAZA_FEE_*); keep the two in step.
+ */
+export function buyerFee(amount: number): number {
+  return (Math.round(amount * 4.5) + 45) / 100;
 }
