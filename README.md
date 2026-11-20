@@ -152,6 +152,9 @@ nustatę išmokas (tapatybę ir IBAN įveda „Stripe“ puslapyje).
    `STRIPE_WEBHOOK_SECRET`.
 4. Funkcija `payments` diegiama su išjungta JWT patikra (ją kviečia ir „Stripe“); naudotojo teises ji tikrina pati.
 
+Be to, už kiekvieną per platformą apmokėtą užsakymą pirkėjas moka **1 € administravimo mokestį** MB „Sintela“
+(`PARTAZA_ADMIN_FEE_CENTS`, programėlėje – `ADMIN_FEE` faile `src/theme.ts`).
+
 Pirkėjo apsaugos mokestis: **4,5 % + 0,45 €** nuo dalies kainos ir pristatymo sumos (keičiamas paslaptimis
 `PARTAZA_FEE_PERCENT` ir `PARTAZA_FEE_FIXED_CENTS`; tą patį reikia įrašyti `src/theme.ts` funkcijoje `buyerFee`).
 Jis parinktas taip, kad platformai mokėjimai nieko nekainuotų net brangiausiu atveju: „Stripe“ kortelės mokestis

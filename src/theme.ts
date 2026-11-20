@@ -32,6 +32,9 @@ export function money(value: number): string {
  * Sized to cover the payment provider's charges and VAT. The server charges the real amount
  * (supabase/functions/payments, PARTAZA_FEE_*); keep the two in step.
  */
+/** Platform's administration fee per order paid through the platform, in euros (server: PARTAZA_ADMIN_FEE_CENTS). */
+export const ADMIN_FEE = 1;
+
 export function buyerFee(amount: number): number {
   return (Math.round(amount * 4.5) + 45) / 100;
 }

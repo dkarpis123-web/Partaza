@@ -5,7 +5,7 @@ import { Text, View } from 'react-native';
 import { Button, Card, Chip, Muted, Notice, Page, Row } from '@/components/ui';
 import { openExternal } from '@/services/open';
 import { useStore } from '@/store';
-import { buyerFee, colors, money } from '@/theme';
+import { ADMIN_FEE, buyerFee, colors, money } from '@/theme';
 
 /** PaidOrder summary before the buyer is sent to the payment page. */
 export default function BuyScreen() {
@@ -50,7 +50,7 @@ export default function BuyScreen() {
   const price = accepted?.amount != null ? Math.min(accepted.amount, listing.price) : listing.price;
   const shipping = delivery === 'shipping' ? listing.shipping ?? 0 : 0;
   const fee = buyerFee(price + shipping);
-  const total = Math.round((price + shipping + fee) * 100) / 100;
+  const total = Math.round((price + shipping + fee + ADMIN_FEE) * 100) / 100;
   const seller = userById(listing.sellerId);
 
   const start = async () => {
@@ -81,11 +81,12 @@ export default function BuyScreen() {
         <Row label={accepted ? 'Sutarta kaina' : 'Kaina'} value={`${money(price)} ${listing.vat ? 'su PVM' : 'be PVM'}`} />
         <Row label={delivery === 'shipping' ? 'Pristatymas' : 'Atsiėmimas'} value={delivery === 'shipping' ? money(shipping) : `${listing.city}, nemokamai`} />
         <Row label="Pirkėjo apsauga" value={money(fee)} />
+        <Row label="Administravimo mokestis" value={money(ADMIN_FEE)} />
         <Row label="Iš viso" value={money(total)} strong />
       </Card>
 
       <Notice>
-        Pinigai pardavėjui nepervedami iš karto: juos laiko mokėjimų bendrovė „Stripe“. Pardavėjas juos gaus, kai patvirtinsite, kad dalį gavote ir ji tvarkinga. Gavę dalį turite 5 dienas jai patikrinti. Pirkėjo apsaugos mokestis (4,5 % + 0,45 €) padengia saugų mokėjimą ir pinigų laikymą iki gavimo.
+        Pinigai pardavėjui nepervedami iš karto: juos laiko mokėjimų bendrovė „Stripe“. Pardavėjas juos gaus, kai patvirtinsite, kad dalį gavote ir ji tvarkinga. Gavę dalį turite 5 dienas jai patikrinti. Pirkėjo apsaugos mokestis (4,5 % + 0,45 €) padengia saugų mokėjimą ir pinigų laikymą iki gavimo, o 1 € administravimo mokestis – užsakymo tvarkymą.
       </Notice>
       <Muted>
         {delivery === 'shipping'

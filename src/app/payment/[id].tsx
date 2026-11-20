@@ -110,7 +110,7 @@ export default function OrderScreen() {
       <Card style={{ gap: 0 }}>
         <Row label="Dalis" value={money(order.itemAmount)} />
         <Row label={pickup ? 'Atsiėmimas' : 'Pristatymas'} value={pickup ? 'nemokamai' : money(order.shippingAmount)} />
-        {order.feeAmount > 0 ? <Row label="Pirkėjo apsauga" value={money(order.feeAmount)} /> : null}
+        {order.feeAmount > 0 ? <Row label="Pirkėjo apsauga ir administravimas" value={money(order.feeAmount)} /> : null}
         <Row label={buyer ? 'Sumokėta' : 'Pirkėjas sumokėjo'} value={money(order.total)} />
         {buyer ? null : <Row label="Jums bus pervesta" value={money(payout)} strong />}
         {order.paidAt ? <Row label="Apmokėta" value={date(order.paidAt)} /> : null}

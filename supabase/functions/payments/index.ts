@@ -19,6 +19,7 @@
 //   SITE_URL                  optional, default https://partaza.eu
 //   PARTAZA_FEE_PERCENT       optional, buyer fee in percent of item + delivery, default 4.5
 //   PARTAZA_FEE_FIXED_CENTS   optional, fixed buyer fee in cents, default 45
+//   PARTAZA_ADMIN_FEE_CENTS   optional, the platform's administration fee per order in cents, default 100
 //
 // The default buyer fee is sized so that payments cost the platform nothing even in the most
 // expensive case: Stripe's card fee (1.5 % + 0.25 EUR for standard EU cards, up to
@@ -49,6 +50,7 @@ const WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 const SITE = (Deno.env.get('SITE_URL') ?? 'https://partaza.eu').replace(/\/$/, '');
 const FEE_PERCENT = Math.max(0, Number(Deno.env.get('PARTAZA_FEE_PERCENT') ?? '4.5') || 0);
 const FEE_FIXED = Math.max(0, Math.round(Number(Deno.env.get('PARTAZA_FEE_FIXED_CENTS') ?? '45') || 0));
+const ADMIN_FEE = Math.max(0, Math.round(Number(Deno.env.get('PARTAZA_ADMIN_FEE_CENTS') ?? '100') || 0));
 
 function key(dictionaryName: string, legacyName: string): string {
   try {
@@ -395,7 +397,8 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   }
   const item = Math.round(price * 100);
   const shipping = delivery === 'shipping' ? Math.round(Number(listing.shipping) * 100) : 0;
-  const fee = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round(((item + shipping) * FEE_PERCENT) / 100) + FEE_FIXED : 0;
+  const protection = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round(((item + shipping) * FEE_PERCENT) / 100) + FEE_FIXED : 0;
+  const fee = protection + ADMIN_FEE;
   const total = item + shipping + fee;
   if (total < 50) return { error: 'amount_too_small' };
 
@@ -419,7 +422,8 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
 
   const lines: Json[] = [{ quantity: 1, price_data: { currency: 'eur', unit_amount: item, product_data: { name: String(listing.title).slice(0, 120) } } }];
   if (shipping > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: shipping, product_data: { name: 'Pristatymas' } } });
-  if (fee > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: fee, product_data: { name: 'Pirkėjo apsauga' } } });
+  if (protection > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: protection, product_data: { name: 'Pirkėjo apsauga' } } });
+  if (ADMIN_FEE > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: ADMIN_FEE, product_data: { name: 'Administravimo mokestis' } } });
 
   try {
     const session = await stripe(
