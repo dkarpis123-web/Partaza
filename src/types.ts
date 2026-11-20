@@ -61,6 +61,8 @@ export interface Listing {
   createdAt: number;
   /** Part for a historic / classic vehicle. */
   classic?: boolean;
+  /** A whole vehicle sold for parts in one listing, instead of a single part. */
+  wholeVehicle?: boolean;
   /** 'sold' listings are hidden from buyers and counted in the seller's dashboard. */
   status?: 'active' | 'sold';
   /* The fields below are private: only the seller ever receives them. */

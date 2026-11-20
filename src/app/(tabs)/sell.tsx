@@ -23,6 +23,7 @@ export default function SellScreen() {
   const { donors, addDonor, registered, live } = useStore();
   const [photos, setPhotos] = useState<string[]>([]);
   const [fromDonor, setFromDonor] = useState(false);
+  const [whole, setWhole] = useState(false);
   const [donorId, setDonorId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [donorName, setDonorName] = useState('');
@@ -68,7 +69,7 @@ export default function SellScreen() {
 
   const next = () => {
     if (fromDonor && !donorId) return setError('Pasirinkite automobilį arba pridėkite naują.');
-    router.push({ pathname: '/sell/review', params: { photos: JSON.stringify(photos), donor: fromDonor && donorId ? donorId : '' } });
+    router.push({ pathname: '/sell/review', params: { photos: JSON.stringify(photos), donor: fromDonor && donorId ? donorId : '', whole: fromDonor && whole ? '1' : '' } });
   };
 
   return (
@@ -78,12 +79,13 @@ export default function SellScreen() {
       }>
       <Heading>Ką parduodate?</Heading>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        <Chip label="Pavienė dalis" selected={!fromDonor} onPress={() => { setFromDonor(false); setError(''); }} />
-        <Chip label="Dalys iš ardomo automobilio" selected={fromDonor} onPress={() => { setFromDonor(true); setError(''); }} />
+        <Chip label="Pavienė dalis" selected={!fromDonor} onPress={() => { setFromDonor(false); setWhole(false); setError(''); }} />
+        <Chip label="Dalys iš ardomo automobilio" selected={fromDonor && !whole} onPress={() => { setFromDonor(true); setWhole(false); setError(''); }} />
+        <Chip label="Visas automobilis dalims" selected={fromDonor && whole} onPress={() => { setFromDonor(true); setWhole(true); setError(''); }} />
       </View>
       {fromDonor ? (
         <Card>
-          <Muted>Automobilį įrašote vieną kartą. Tada kiekvienai jo daliai užtenka nuotraukų, o apskaita parodys, kiek automobilis jau atsipirko. Automobilio kainą matote tik jūs.</Muted>
+          <Muted>{whole ? 'Parduodate visą automobilį vienu skelbimu: pirkėjas pasiima jį visą ir ardo pats. Automobilio pirkimo kainą matote tik jūs.' : 'Automobilį įrašote vieną kartą. Tada kiekvienai jo daliai užtenka nuotraukų, o apskaita parodys, kiek automobilis jau atsipirko. Automobilio kainą matote tik jūs.'}</Muted>
           {donors.length > 0 ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {donors.map((d) => (
@@ -105,7 +107,7 @@ export default function SellScreen() {
       ) : null}
       {error ? <Notice tone="warn">{error}</Notice> : null}
 
-      <Heading>Nufotografuokite dalį</Heading>
+      <Heading>{fromDonor && whole ? 'Nufotografuokite automobilį' : 'Nufotografuokite dalį'}</Heading>
       <Muted>Trys nuotraukos, ir skelbimas beveik paruoštas. Pavadinimą, numerį ir kainą padėsime užpildyti kitame žingsnyje.</Muted>
 
       <Card>

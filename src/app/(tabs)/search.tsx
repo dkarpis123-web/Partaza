@@ -36,6 +36,7 @@ export default function SearchScreen() {
   const [city, setCity] = useState('');
   const [onlyNoDefects, setOnlyNoDefects] = useState(false);
   const [onlyClassic, setOnlyClassic] = useState(false);
+  const [onlyWhole, setOnlyWhole] = useState(false);
   const [delivery, setDelivery] = useState(true);
   const [pickup, setPickup] = useState(true);
   const [sort, setSort] = useState<Sort>('cheapest');
@@ -78,6 +79,7 @@ export default function SearchScreen() {
       if (c && !normalize(l.city).includes(c)) return false;
       if (onlyNoDefects && l.defects.length > 0) return false;
       if (onlyClassic && !l.classic) return false;
+      if (onlyWhole && !l.wholeVehicle) return false;
       if (onlyMyCar && myCar && !fitsCar(`${l.fits} ${l.title}`, myCar.make, myCar.model)) return false;
       if (l.status === 'sold') return false;
       const deliverable = l.shipping !== null;
@@ -89,7 +91,7 @@ export default function SearchScreen() {
       if (sort === 'place') return `${a.country} ${a.city}`.localeCompare(`${b.country} ${b.city}`, 'lt');
       return totalPrice(a) - totalPrice(b);
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMyCar, myCar, delivery, pickup, sort]);
+  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort]);
 
   return (
     <Page>
@@ -152,6 +154,7 @@ export default function SearchScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Chip label={showFilters ? 'Slėpti filtrus' : 'Vieta, gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
         <Chip label="Istoriniai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
+        <Chip label="Visas automobilis" selected={onlyWhole} onPress={() => setOnlyWhole((v) => !v)} />
         <Chip label="Visi" selected={type === null} onPress={() => setType(null)} />
         {TYPES.map((t) => (
           <Chip key={t} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />

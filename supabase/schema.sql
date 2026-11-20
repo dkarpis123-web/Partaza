@@ -422,3 +422,9 @@ begin
   end if;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 0.5: visas automobilis dalims vienu skelbimu
+-- ---------------------------------------------------------------------------
+
+alter table public.listings add column if not exists whole_vehicle boolean not null default false;

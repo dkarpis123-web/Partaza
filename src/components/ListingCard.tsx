@@ -37,6 +37,11 @@ export function ListingCard({ listing }: { listing: Listing }) {
           <Photo uri={listing.photos[0]} height={120} />
           <View style={{ position: 'absolute', left: 8, top: 8 }}>
             <DefectBadge hasDefects={hasDefects} />
+            {listing.wholeVehicle ? (
+              <View style={{ marginTop: 6, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.ink }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Visas automobilis</Text>
+              </View>
+            ) : null}
           </View>
         </View>
         <View style={{ padding: 12, gap: 4 }}>

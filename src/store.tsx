@@ -115,7 +115,7 @@ function toListing(row: Row): Listing {
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: row.country, shipping: row.shipping === null ? null : Number(row.shipping),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
-    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, status: row.status === 'sold' ? 'sold' : 'active',
+    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, wholeVehicle: !!row.whole_vehicle, status: row.status === 'sold' ? 'sold' : 'active',
   };
 }
 
@@ -378,7 +378,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
           defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
-          classic: !!draft.classic,
+          classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle,
         })
         .select()
         .single();
@@ -408,7 +408,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .update({
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
-            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic,
+            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, whole_vehicle: !!draft.wholeVehicle,
           })
           .eq('id', listingId);
         if (error) return explain(error);

@@ -133,6 +133,7 @@ export default function ListingScreen() {
       <Card style={{ gap: 0 }}>
         <Row label="Būklė" value={CONDITION_LABELS[listing.condition]} />
         <Row label="Transportas" value={`${VEHICLE_LABELS[listing.vehicleType]}${listing.classic ? ' · istorinis' : ''}`} />
+        {listing.wholeVehicle ? <Row label="Parduodama" value="Visas automobilis dalims" /> : null}
         {listing.fits ? <Row label="Tinka" value={listing.fits} /> : null}
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${listing.country}`} />

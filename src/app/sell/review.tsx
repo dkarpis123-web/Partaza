@@ -46,8 +46,9 @@ export default function ReviewScreen() {
 
 function ReviewForm({ editing }: { editing?: Listing }) {
   const router = useRouter();
-  const params = useLocalSearchParams<{ photos?: string; donor?: string }>();
+  const params = useLocalSearchParams<{ photos?: string; donor?: string; whole?: string }>();
   const { listings, donors, registered, phone, addListing, updateListing } = useStore();
+  const whole = editing ? !!editing.wholeVehicle : params.whole === '1';
   const donor = donors.find((d) => d.id === (editing ? editing.donorId : params.donor));
 
   const initialPhotos = useMemo<string[]>(() => {
@@ -62,18 +63,18 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   // The seller can still add, remove or retake photos here before publishing.
   const [photos, setPhotos] = useState<string[]>(initialPhotos);
 
-  const [loading, setLoading] = useState(!editing);
+  const [loading, setLoading] = useState(!editing && !whole);
   const [isDemo, setIsDemo] = useState(false);
-  const [title, setTitle] = useState(editing?.title ?? '');
+  const [title, setTitle] = useState(editing?.title ?? (whole && donor ? `${donor.name}, visas dalims` : ''));
   const [oem, setOem] = useState(editing?.oem ?? '');
-  const [fits, setFits] = useState(editing?.fits ?? '');
+  const [fits, setFits] = useState(editing?.fits ?? (whole && donor ? donor.name : ''));
   const [vehicleType, setVehicleType] = useState<VehicleType>(editing?.vehicleType ?? 'car');
   const [condition, setCondition] = useState<Condition>(editing?.condition ?? 'used');
   const [defects, setDefects] = useState<string[]>(editing?.defects ?? []);
   const [newDefect, setNewDefect] = useState('');
   const [priceText, setPriceText] = useState(editing ? toText(editing.price) : '');
   const [vat, setVat] = useState(editing?.vat ?? false);
-  const [shipping, setShipping] = useState<number | null>(editing ? editing.shipping : 3.5);
+  const [shipping, setShipping] = useState<number | null>(editing ? editing.shipping : whole ? null : 3.5);
   const [city, setCity] = useState(editing?.city ?? '');
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
@@ -82,7 +83,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
-    if (editing) return; // An existing listing already has its fields.
+    if (editing || whole) return; // An existing listing already has its fields; a whole vehicle is described by the seller.
     let active = true;
     recognizePart(initialPhotos).then((r) => {
       if (!active) return;
@@ -97,7 +98,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     return () => {
       active = false;
     };
-  }, [initialPhotos, editing]);
+  }, [initialPhotos, editing, whole]);
 
   const advice = useMemo(() => priceAdviceFromMarket(oem, editing ? listings.filter((l) => l.id !== editing.id) : listings, defects.length > 0), [oem, listings, defects.length, editing]);
   const price = parsePrice(priceText);
@@ -119,7 +120,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country: editing?.country ?? 'Lietuva', shipping, pickup: true, photos, allowOffers,
-      classic, donorId: donor ? donor.id : null, cost: donor ? null : cost,
+      classic, wholeVehicle: whole, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
       const problem = await updateListing(editing.id, draft);
@@ -127,7 +128,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       if (problem) return setError(problem);
       return router.back();
     }
-    const result = await addListing({
+    const result = await addListing(whole ? draft : {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country: 'Lietuva', shipping, pickup: true, photos, allowOffers,
       classic, donorId: donor ? donor.id : null, cost: donor ? null : cost,
@@ -151,7 +152,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       {isDemo ? (
         <Notice tone="warn">Bandomoji versija: dalies atpažinimas dar neprijungtas, todėl laukai užpildyti pavyzdžiu. Pataisykite juos pagal savo dalį.</Notice>
       ) : (
-        <Muted>{editing ? 'Keičiate paskelbtą skelbimą. Pakeitimus pirkėjai pamatys iškart.' : 'Užpildėme pagal jūsų nuotraukas. Peržiūrėkite ir pataisykite, jei ką supratome ne taip.'}</Muted>
+        <Muted>{editing ? 'Keičiate paskelbtą skelbimą. Pakeitimus pirkėjai pamatys iškart.' : whole ? 'Visas automobilis dalims: aprašykite, kas veikia, kas pažeista ir ko trūksta. Pirkėjas automobilį pasiima pats.' : 'Užpildėme pagal jūsų nuotraukas. Peržiūrėkite ir pataisykite, jei ką supratome ne taip.'}</Muted>
       )}
 
       <Card>
