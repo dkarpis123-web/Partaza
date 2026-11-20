@@ -61,6 +61,8 @@ export interface Listing {
   createdAt: number;
   /** Part for a historic / classic vehicle. */
   classic?: boolean;
+  /** When the seller last lowered the price; the 90-day reminder counts from here (or from createdAt). */
+  refreshedAt?: number | null;
   /** A whole vehicle sold for parts in one listing, instead of a single part. */
   wholeVehicle?: boolean;
   /** 'sold' listings are hidden from buyers and counted in the seller's dashboard. */

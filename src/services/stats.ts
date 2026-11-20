@@ -71,3 +71,27 @@ export function sellerStats(listings: Listing[], donors: Donor[], sellerId: stri
     donors: donorStats,
   };
 }
+
+export const STALE_DAYS = 90;
+
+export interface StaleListing {
+  listing: Listing;
+  /** Whole days since it was listed or since the price was last lowered. */
+  days: number;
+  /** Suggested new price: 10 % lower, rounded to a whole euro (to 0.50 € under 20 €). */
+  suggested: number;
+}
+
+/** The seller's active listings that have waited 90 days or more without a price cut, oldest first. */
+export function staleListings(listings: Listing[], sellerId: string, now: number): StaleListing[] {
+  return listings
+    .filter((l) => l.sellerId === sellerId && l.status !== 'sold')
+    .map((listing) => {
+      const since = Math.max(listing.createdAt, listing.refreshedAt ?? 0);
+      const lower = listing.price * 0.9;
+      const suggested = listing.price >= 20 ? Math.round(lower) : Math.round(lower * 2) / 2;
+      return { listing, days: Math.floor((now - since) / 86400000), suggested };
+    })
+    .filter((x) => x.days >= STALE_DAYS && x.suggested > 0 && x.suggested < x.listing.price)
+    .sort((a, b) => b.days - a.days);
+}

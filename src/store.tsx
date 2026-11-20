@@ -48,6 +48,8 @@ interface Store extends State {
   updateListing: (listingId: string, draft: ListingDraft) => Result;
   addDonor: (name: string, vin: string, cost: number) => Promise<{ id?: string; error?: string }>;
   markSold: (listingId: string, price: number) => Result;
+  /** Lowers the price and restarts the 90-day reminder. */
+  reducePrice: (listingId: string, price: number) => Result;
   openThread: (listingId: string) => Promise<{ id?: string; error?: string }>;
   sendText: (threadId: string, text: string) => Result;
   sendOffer: (threadId: string, amount: number, text: string) => Result;
@@ -115,7 +117,7 @@ function toListing(row: Row): Listing {
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: row.country, shipping: row.shipping === null ? null : Number(row.shipping),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
-    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, wholeVehicle: !!row.whole_vehicle, status: row.status === 'sold' ? 'sold' : 'active',
+    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : 'active',
   };
 }
 
@@ -438,6 +440,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { id: donor.id };
     };
 
+    const reducePrice: Store['reducePrice'] = async (listingId, price) => {
+      const when = new Date();
+      if (supabase) {
+        const { error } = await supabase.from('listings').update({ price, refreshed_at: when.toISOString() }).eq('id', listingId);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, listings: s.listings.map((l) => (l.id === listingId ? { ...l, price, refreshedAt: when.getTime() } : l)) }));
+      return null;
+    };
+
     const markSold: Store['markSold'] = async (listingId, price) => {
       const { me } = stateRef.current;
       if (supabase) {
@@ -553,7 +565,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
+    return { registerDemo, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, deleteAccount };
   }, [refresh]);
 
   const value = useMemo<Store>(

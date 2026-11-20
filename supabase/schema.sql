@@ -428,3 +428,6 @@ $$;
 -- ---------------------------------------------------------------------------
 
 alter table public.listings add column if not exists whole_vehicle boolean not null default false;
+
+-- 0.5: kada pardavėjas paskutinį kartą sumažino kainą (nuo čia skaičiuojamas 90 dienų priminimas)
+alter table public.listings add column if not exists refreshed_at timestamptz;

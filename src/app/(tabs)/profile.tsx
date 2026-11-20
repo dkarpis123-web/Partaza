@@ -5,12 +5,15 @@ import { Text, View, useWindowDimensions } from 'react-native';
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { normalizePhone } from '@/services/phone';
+import { STALE_DAYS, staleListings } from '@/services/stats';
 import { useStore } from '@/store';
-import { MAX_WIDTH, colors } from '@/theme';
+import { MAX_WIDTH, colors, money } from '@/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice } = useStore();
+  const [now] = useState(() => Date.now());
+  const stale = staleListings(listings, me.id, now);
   const [phoneText, setPhoneText] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -70,6 +73,22 @@ export default function ProfileScreen() {
       </Card>
 
       <Button label="Mano prekyba: pajamos, išlaidos, pelnas" kind="dark" onPress={() => router.push('/dashboard')} />
+
+      {stale.length > 0 ? (
+        <Card>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Verta peržiūrėti ({stale.length})</Text>
+          <Muted>Šios dalys neparduotos {STALE_DAYS} dienų ar ilgiau. Dažniausiai padeda mažesnė kaina arba geresnės nuotraukos.</Muted>
+          {stale.map(({ listing, days, suggested }) => (
+            <View key={listing.id} style={{ gap: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <Text style={{ fontSize: 14, color: colors.ink }}>{listing.title} · {money(listing.price)} · {days} d.</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Button label={`Sumažinti iki ${money(suggested)}`} style={{ flex: 1 }} onPress={async () => show(await reducePrice(listing.id, suggested))} />
+                <Button label="Atidaryti" kind="outline" style={{ flex: 1 }} onPress={() => router.push(`/listing/${listing.id}`)} />
+              </View>
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       <Heading>Mano skelbimai ({mine.length})</Heading>
       {mine.length === 0 ? (
