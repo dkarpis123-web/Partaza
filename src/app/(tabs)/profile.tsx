@@ -13,8 +13,9 @@ import { PAID_ORDER_LABELS } from '@/types';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, paidOrders, payReady, userById } = useStore();
-  const saved = listings.filter((l) => favorites.includes(l.id) && l.status !== 'sold');
+  const { me, registered, listings, live, phone, setPhone, setKind, signOut, deleteAccount, reducePrice, favorites, orders, paidOrders, payReady, userById } = useStore();
+  const openOrders = orders.filter((o) => o.status === 'agreed' || o.status === 'handed').length;
+  const saved = listings.filter((l) => favorites.includes(l.id) && (l.status ?? 'active') === 'active');
   const [now] = useState(() => Date.now());
   const stale = staleListings(listings, me.id, now);
   const [phoneText, setPhoneText] = useState<string | null>(null);
@@ -104,6 +105,7 @@ export default function ProfileScreen() {
         </Card>
       ) : null}
 
+      <Button label={openOrders > 0 ? `Užsakymai (${openOrders} vykdomi)` : 'Užsakymai'} kind="outline" onPress={() => router.push('/orders')} />
       <Button label="Mano prekyba: pajamos, išlaidos, pelnas" kind="dark" onPress={() => router.push('/dashboard')} />
 
       {stale.length > 0 ? (

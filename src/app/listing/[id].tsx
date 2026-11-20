@@ -12,7 +12,9 @@ import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, payReady } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, report, markSold, updatePhotos, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
+  const [buying, setBuying] = useState(false);
+  const [ordering, setOrdering] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
   const [shown, setShown] = useState(0);
@@ -60,21 +62,54 @@ export default function ListingScreen() {
     setReported(true);
   };
 
+  const status = listing.status ?? 'active';
+  // The price the buyer would pay: an offer the seller (or the buyer) already accepted, otherwise the asking price.
+  const myThread = threadForListing(listing.id);
+  const acceptedOffer = myThread ? [...myThread.messages].reverse().find((m) => m.kind === 'offer' && m.status === 'accepted') : undefined;
+  const buyPrice = acceptedOffer?.amount ?? listing.price;
+  const openOrder = orders.find((o) => o.listingId === listing.id && (o.status === 'agreed' || o.status === 'handed'));
+
+  const buy = async () => {
+    if (ordering) return;
+    if (live && !registered) return router.push('/register');
+    setOrdering(true);
+    const result = await createOrder(listing.id);
+    setOrdering(false);
+    if (!result.id) return setError(result.error ?? 'Nepavyko patvirtinti pirkimo.');
+    setBuying(false);
+    router.push('/orders');
+  };
+
   return (
     <Page
       footer={
         mine ? (
-          <Muted>{listing.status === 'sold' ? 'Tai jūsų parduota dalis.' : 'Tai jūsų skelbimas. Pirkėjai jį mato paieškoje.'}</Muted>
+          <Muted>
+            {status === 'sold' ? 'Tai jūsų parduota dalis.' : status === 'reserved' ? 'Tai jūsų skelbimas. Jis rezervuotas pirkėjui – žr. „Užsakymai“.' : 'Tai jūsų skelbimas. Pirkėjai jį mato paieškoje.'}
+          </Muted>
+        ) : status !== 'active' ? (
+          <Muted>{openOrder ? 'Šią dalį perkate jūs – žr. „Užsakymai“ profilyje.' : status === 'sold' ? 'Ši dalis jau parduota.' : 'Ši dalis rezervuota kitam pirkėjui.'}</Muted>
+        ) : buying ? (
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Perkate už {money(buyPrice)}{acceptedOffer ? ' (sutarta kaina)' : ''}</Text>
+            <Muted>Mokėjimai per „Partaza“ dar neįjungti. Patvirtinus dalis rezervuojama jums, o dėl apmokėjimo ir perdavimo susitarsite su pardavėju pokalbyje.</Muted>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button label="Atšaukti" kind="outline" onPress={() => setBuying(false)} style={{ flex: 1 }} />
+              <Button label={ordering ? 'Palaukite…' : 'Patvirtinti pirkimą'} disabled={ordering} onPress={buy} style={{ flex: 1 }} />
+            </View>
+          </View>
         ) : (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 8 }}>
             {canBuy ? (
-              <Button label={`Pirkti · ${money(listing.price)}`} onPress={() => router.push(registered ? `/buy/${listing.id}` : '/register')} />
-            ) : null}
+              <Button label={`Pirkti ir apmokėti · ${money(buyPrice)}`} onPress={() => router.push(registered ? `/buy/${listing.id}` : '/register')} />
+            ) : (
+              <Button label={`Pirkti už ${money(buyPrice)}`} onPress={() => setBuying(true)} />
+            )}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               {listing.allowOffers ? (
                 <Button label="Siūlyti kainą" kind="outline" onPress={() => router.push(`/offer/${listing.id}`)} style={{ flex: 1 }} />
               ) : null}
-              <Button label="Rašyti pardavėjui" kind={canBuy ? 'outline' : 'primary'} onPress={openChat} style={{ flex: 1 }} />
+              <Button label="Rašyti pardavėjui" kind="outline" onPress={openChat} style={{ flex: 1 }} />
             </View>
           </View>
         )
@@ -94,7 +129,7 @@ export default function ListingScreen() {
         </View>
       ) : null}
 
-      {mine && listing.status !== 'sold' ? (
+      {mine && status === 'active' ? (
         photoDraft === null ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button label="Redaguoti skelbimą" kind="outline" onPress={() => router.push({ pathname: '/sell/review', params: { edit: listing.id } })} style={{ flex: 1 }} />
@@ -181,7 +216,7 @@ export default function ListingScreen() {
       {mine && listing.status === 'sold' ? (
         <Notice>Pažymėta kaip parduota{listing.soldPrice != null ? ` už ${money(listing.soldPrice)}` : ''}. Pirkėjai šio skelbimo nebemato.</Notice>
       ) : null}
-      {mine && listing.status !== 'sold' ? (
+      {mine && status === 'active' ? (
         selling ? (
           <Card>
             <Field label="Už kiek pardavėte, €" value={soldText} onChangeText={setSoldText} keyboardType="decimal-pad" />

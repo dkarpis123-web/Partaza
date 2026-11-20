@@ -72,7 +72,7 @@ function roundPrice(value: number): number {
 export function priceAdviceFromMarket(oem: string, listings: Listing[], hasDefects = false): PriceAdvice | null {
   const code = normalizeCode(oem);
   if (code.length < 4) return null;
-  const same = listings.filter((l) => l.status !== 'sold' && normalizeCode(l.oem) === code);
+  const same = listings.filter((l) => (l.status ?? 'active') === 'active' && normalizeCode(l.oem) === code);
   if (same.length === 0) return null;
   const prices = same.map((l) => l.price).sort((a, b) => a - b);
   const middle = Math.floor(prices.length / 2);

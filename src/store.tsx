@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
-import type { Donor, Listing, ListingDraft, Message, MyCar, PaidOrder, SellerKind, Thread, User } from '@/types';
+import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -21,6 +21,8 @@ interface State {
   threads: Thread[];
   /** The signed-in seller's own dismantled vehicles. */
   donors: Donor[];
+  /** Purchases and sales the signed-in person takes part in, newest first. */
+  orders: Order[];
   /** Ids of listings the signed-in person has saved. */
   favorites: string[];
   /** Ids of people the signed-in person has blocked. Their listings and chats are hidden. */
@@ -55,6 +57,10 @@ interface Store extends State {
   registerDemo: (name: string, kind: SellerKind, phone: string) => void;
   signUp: (email: string, password: string, name: string, kind: SellerKind, phone: string) => Result;
   setPhone: (phone: string) => Result;
+  /** Confirms a purchase at the agreed price (the last accepted offer, otherwise the listing price). */
+  createOrder: (listingId: string) => Promise<{ id?: string; error?: string }>;
+  /** cancel: either side while nothing was handed over; hand: the seller; complete: the buyer. */
+  orderAction: (orderId: string, action: 'cancel' | 'hand' | 'complete') => Result;
   /** Saves or un-saves a listing. */
   toggleFavorite: (listingId: string) => Result;
   blockUser: (userId: string) => Result;
@@ -102,8 +108,8 @@ const UNKNOWN: User = { id: '', name: 'Naudotojas', kind: 'private', rating: 0, 
 
 function initialState(): State {
   return live
-    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], paidOrders: [], payReady: [] }
-    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], paidOrders: [], payReady: [] };
+    ? { ready: false, me: GUEST, registered: false, users: [], listings: [], threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], paidOrders: [], payReady: [] }
+    : { ready: true, me: GUEST, registered: false, users: seedUsers, listings: seedListings, threads: [], donors: [], phone: '', blocked: [], favorites: [], orders: [], paidOrders: [], payReady: [] };
 }
 
 let counter = 0;
@@ -119,8 +125,9 @@ const ERRORS: Record<string, string> = {
   offers_not_allowed: 'Pardavėjas šiam skelbimui pasiūlymų nepriima.',
   listing_not_active: 'Skelbimas nebeaktyvus.',
   offer_not_pending: 'Į šį pasiūlymą jau atsakyta.',
-  not_allowed: 'Į savo pasiūlymą atsakyti negalima.',
   not_authenticated: 'Pirmiausia prisijunkite.',
+  own_listing: 'Savo skelbimo pirkti negalima.',
+  not_allowed: 'Šio veiksmo dabar atlikti negalima.',
   user_blocked: 'Šiam naudotojui rašyti negalite: vienas iš jūsų užblokavo kitą.',
   'row-level security': 'Šis veiksmas neleidžiamas. Jei rašote kitam naudotojui, gali būti, kad vienas iš jūsų užblokavo kitą.',
   phone_required: 'Įrašykite telefono numerį, pvz., +37061234567.',
@@ -153,7 +160,15 @@ function toListing(row: Row): Listing {
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: row.country, shipping: row.shipping === null ? null : Number(row.shipping),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
-    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : 'active',
+    createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
+  };
+}
+
+function toOrder(row: Row): Order {
+  return {
+    id: row.id, listingId: row.listing_id ?? null, threadId: row.thread_id ?? null, buyerId: row.buyer_id ?? '', sellerId: row.seller_id ?? '',
+    title: row.title, photo: row.photo ?? null, price: Number(row.price), shipping: row.shipping === null ? null : Number(row.shipping),
+    status: row.status, createdAt: new Date(row.created_at).getTime(),
   };
 }
 
@@ -278,7 +293,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     let donors: Donor[] = [];
     let blocked: string[] = [];
     let favorites: string[] = [];
+    let orders: Order[] = [];
     if (uid) {
+      const ordersRes = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      orders = (ordersRes.data ?? []).map(toOrder);
       const favoritesRes = await supabase.from('favorites').select('listing_id');
       favorites = (favoritesRes.data ?? []).map((f: Row) => f.listing_id);
       const blocksRes = await supabase.from('blocks').select('blocked_id');
@@ -309,6 +327,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const ids = new Set<string>();
     listings.forEach((l) => ids.add(l.sellerId));
     blocked.forEach((id) => ids.add(id));
+    orders.forEach((o) => {
+      if (o.buyerId) ids.add(o.buyerId);
+      if (o.sellerId) ids.add(o.sellerId);
+    });
     threads.forEach((t) => {
       ids.add(t.buyerId);
       ids.add(t.sellerId);
@@ -322,7 +344,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const users = (profilesRes.data ?? []).map(toUser);
     const me = uid ? users.find((u) => u.id === uid) ?? { ...GUEST, id: uid } : GUEST;
 
-    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, paidOrders, payReady });
+    setState({ ready: true, me, registered: !!uid, users, listings, threads, donors, phone: uid ? phone : '', blocked, favorites, orders, paidOrders, payReady });
   }, []);
 
   useEffect(() => {
@@ -362,6 +384,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   /* ---------- Actions ---------- */
 
   const actions = useMemo(() => {
+    // Asks the server to e-mail the other person "you have a new message". Best effort: the
+    // server decides whether to send (throttled, respects blocks, off until mail is configured).
+    const notify = (threadId: string) => {
+      if (!supabase) return;
+      supabase.functions.invoke('notify-message', { body: { thread_id: threadId } }).catch(() => {});
+    };
+
     const registerDemo: Store['registerDemo'] = (name, kind, phone) =>
       setState((s) => ({ ...s, registered: true, phone, me: { ...s.me, name, kind } }));
 
@@ -391,6 +420,54 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (error) return { kind: 'error', message: explain(error) };
       await refresh();
       return { kind: params.get('type') === 'recovery' ? 'recovery' : 'signedIn' };
+    };
+
+    const createOrder: Store['createOrder'] = async (listingId) => {
+      const { me, listings, threads } = stateRef.current;
+      if (supabase) {
+        const { data, error } = await supabase.rpc('create_order', { p_listing: listingId });
+        if (error || !data) return { error: explain(error) };
+        if (data.thread_id) notify(data.thread_id);
+        await refresh();
+        return { id: data.id };
+      }
+      // Demo: the same rules, kept in memory.
+      const listing = listings.find((l) => l.id === listingId);
+      if (!listing || (listing.status ?? 'active') !== 'active') return { error: ERRORS.listing_not_active };
+      const thread = threads.find((t) => t.listingId === listingId && t.buyerId === me.id);
+      const accepted = thread ? [...thread.messages].reverse().find((m) => m.kind === 'offer' && m.status === 'accepted') : undefined;
+      const order: Order = {
+        id: newId('o'), listingId, threadId: thread?.id ?? null, buyerId: me.id, sellerId: listing.sellerId, title: listing.title,
+        photo: listing.photos[0] ?? null, price: accepted?.amount ?? listing.price, shipping: listing.shipping, status: 'agreed', createdAt: Date.now(),
+      };
+      setState((s) => ({
+        ...s,
+        orders: [order, ...s.orders],
+        listings: s.listings.map((l) => (l.id === listingId ? { ...l, status: 'reserved' as const } : l)),
+      }));
+      return { id: order.id };
+    };
+
+    const orderAction: Store['orderAction'] = async (orderId, action) => {
+      if (supabase) {
+        const { data, error } = await supabase.rpc('order_action', { p_order: orderId, p_action: action });
+        if (error) return explain(error);
+        if (data?.thread_id) notify(data.thread_id);
+        await refresh();
+        return null;
+      }
+      const next = action === 'cancel' ? 'cancelled' : action === 'hand' ? 'handed' : 'completed';
+      setState((s) => {
+        const order = s.orders.find((o) => o.id === orderId);
+        if (!order) return s;
+        const listingStatus = action === 'cancel' ? ('active' as const) : action === 'complete' ? ('sold' as const) : ('reserved' as const);
+        return {
+          ...s,
+          orders: s.orders.map((o) => (o.id === orderId ? { ...o, status: next } : o)),
+          listings: s.listings.map((l) => (l.id === order.listingId ? { ...l, status: listingStatus, soldPrice: action === 'complete' ? order.price : l.soldPrice } : l)),
+        };
+      });
+      return null;
     };
 
     const toggleFavorite: Store['toggleFavorite'] = async (listingId) => {
@@ -644,13 +721,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { id: thread.id };
     };
 
-    // Asks the server to e-mail the other person "you have a new message". Best effort: the
-    // server decides whether to send (throttled, respects blocks, off until mail is configured).
-    const notify = (threadId: string) => {
-      if (!supabase) return;
-      supabase.functions.invoke('notify-message', { body: { thread_id: threadId } }).catch(() => {});
-    };
-
     const sendText: Store['sendText'] = async (threadId, text) => {
       const { me } = stateRef.current;
       if (!supabase) {
@@ -762,7 +832,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, toggleFavorite, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

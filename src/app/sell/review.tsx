@@ -8,6 +8,7 @@ import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
+import { VEHICLE_ICONS } from '@/components/VehicleIcon';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
 const CONDITIONS = Object.keys(CONDITION_LABELS) as Condition[];
@@ -178,7 +179,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Transportas</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {TYPES.map((t) => (
-            <Chip key={t} label={VEHICLE_LABELS[t]} selected={vehicleType === t} onPress={() => setVehicleType(t)} />
+            <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={vehicleType === t} onPress={() => setVehicleType(t)} />
           ))}
         </ScrollView>
         <Chip label="Istorinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />

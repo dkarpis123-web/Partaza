@@ -31,6 +31,7 @@ export default function RootLayout() {
         <Stack.Screen name="buy/[id]" options={{ title: 'Pirkimas' }} />
         <Stack.Screen name="payment/[id]" options={{ title: 'Užsakymas' }} />
         <Stack.Screen name="payouts" options={{ title: 'Mokėjimai ir išmokos' }} />
+        <Stack.Screen name="orders" options={{ title: 'Užsakymai' }} />
         <Stack.Screen name="reset" options={{ title: 'Slaptažodis' }} />
         <Stack.Screen name="terms" options={{ title: 'Taisyklės' }} />
         <Stack.Screen name="privacy" options={{ title: 'Privatumas' }} />
