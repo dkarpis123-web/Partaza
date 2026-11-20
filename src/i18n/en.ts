@@ -373,6 +373,8 @@ export const EN: Record<string, string> = {
   'Jūs jau naudojate programėlę. Naujausią bandomąją versiją rasite svetainėje partaza.eu/app.': 'You are already using the app. The latest test version is at partaza.eu/app.',
 
   'Ieškoma čia': 'Searching in',
+  'Ieškoti šalies': 'Find a country',
+  'Pvz., Latvija': 'E.g. Latvia',
   'Visos šalys': 'All countries',
   'Keisti': 'Change',
   'Gerai': 'Done',

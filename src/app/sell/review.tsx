@@ -5,9 +5,8 @@ import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart } from '@/services/ai';
-import { COUNTRIES, detectCountry } from '@/services/geo';
-import { tr, useLang } from '@/i18n';
-import { flagOf } from '@/services/match';
+import { COUNTRIES, countryLabel, countryName, detectCountry, locate } from '@/services/geo';
+import { useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -82,7 +81,18 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [vat, setVat] = useState(editing?.vat ?? false);
   const [shipping, setShipping] = useState<number | null>(editing ? editing.shipping : whole ? null : 3.5);
   const [city, setCity] = useState(editing?.city ?? '');
-  const [country, setCountry] = useState(() => editing?.country ?? detectCountry() ?? 'Lietuva');
+  const [country, setCountry] = useState(() => editing?.country ?? detectCountry() ?? 'LT');
+  const [countryFilter, setCountryFilter] = useState('');
+  // A new listing starts with the place the seller is connected from; they can change both.
+  const [placed, setPlaced] = useState(!!editing);
+  useEffect(() => {
+    if (placed) return;
+    locate().then((place) => {
+      setPlaced(true);
+      if (place.country) setCountry((c) => (c === (detectCountry() ?? 'LT') ? (place.country as string) : c));
+      if (place.city) setCity((c) => c || place.city);
+    });
+  }, [placed]);
   const [allowOffers, setAllowOffers] = useState(editing?.allowOffers ?? true);
   const [classic, setClassic] = useState(editing?.classic ?? false);
   const [editCountry, setEditCountry] = useState(false);
@@ -268,16 +278,21 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 13, color: colors.muted }}>Šalis, kurioje yra dalis</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{`${flagOf(country)} ${tr(country)}`}</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>{countryLabel(country)}</Text>
           </View>
           <Button label={editCountry ? 'Gerai' : 'Keisti'} kind="outline" onPress={() => setEditCountry((v) => !v)} />
         </View>
         {editCountry ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {COUNTRIES.map((c) => (
-              <Chip key={c} label={`${flagOf(c)} ${tr(c)}`} selected={country === c} onPress={() => { setCountry(c); setEditCountry(false); }} />
-            ))}
-          </View>
+          <>
+            <Field label="Ieškoti šalies" value={countryFilter} onChangeText={setCountryFilter} placeholder="Pvz., Latvija" />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {COUNTRIES.filter((c) => countryName(c).toLowerCase().includes(countryFilter.trim().toLowerCase()))
+                .slice(0, countryFilter.trim() ? 46 : 10)
+                .map((c) => (
+                  <Chip key={c} label={countryLabel(c)} selected={country === c} onPress={() => { setCountry(c); setEditCountry(false); setCountryFilter(''); }} />
+                ))}
+            </View>
+          </>
         ) : null}
         <Field label="Miestas" value={city} onChangeText={setCity} placeholder="Pvz., Kaunas" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>

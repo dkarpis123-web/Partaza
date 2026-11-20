@@ -20,7 +20,7 @@ function detect(): Lang {
   }
   // No saved choice: Lithuanian for people in Lithuania or with a Lithuanian device, English everywhere else.
   const device = (typeof navigator !== 'undefined' && navigator.language) || Intl.DateTimeFormat().resolvedOptions().locale || 'lt';
-  return detectCountry() === 'Lietuva' || device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
+  return detectCountry() === 'LT' || device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
 }
 
 // The static web page is built in Lithuanian; the device language is applied once the app starts.

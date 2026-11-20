@@ -21,14 +21,3 @@ export function matchesSearch(listing: Listing, search: Pick<SavedSearch, 'query
 export function newMatches(listings: Listing[], search: SavedSearch, myId: string): Listing[] {
   return listings.filter((l) => l.sellerId !== myId && l.createdAt > search.seenAt && matchesSearch(l, search));
 }
-
-/** Short label for a saved search: "7E0615301 · Automobiliai · Kaunas, Lietuva". */
-export function searchParts(search: Pick<SavedSearch, 'query' | 'vehicleType' | 'country' | 'city'>): { query: string; city: string; country: string } {
-  return { query: search.query.trim(), city: search.city.trim(), country: search.country ?? '' };
-}
-
-const FLAGS: Record<string, string> = {
-  Lietuva: '🇱🇹', Latvija: '🇱🇻', Estija: '🇪🇪', Lenkija: '🇵🇱', Vokietija: '🇩🇪', Suomija: '🇫🇮', Švedija: '🇸🇪', Norvegija: '🇳🇴', Danija: '🇩🇰',
-  'Jungtinė Karalystė': '🇬🇧', Airija: '🇮🇪', Nyderlandai: '🇳🇱', Belgija: '🇧🇪', Prancūzija: '🇫🇷', Ispanija: '🇪🇸', Italija: '🇮🇹', Austrija: '🇦🇹', Čekija: '🇨🇿', Ukraina: '🇺🇦',
-};
-export const flagOf = (country: string) => FLAGS[country] ?? '';

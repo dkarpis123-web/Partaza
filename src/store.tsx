@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
+import { countryCode } from '@/services/geo';
 import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, SavedSearch, SellerKind, Thread, User } from '@/types';
 
 /**
@@ -169,7 +170,7 @@ function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
     defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
-    city: row.city, country: row.country, shipping: row.shipping === null ? null : Number(row.shipping),
+    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping),
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : 'active',
   };
@@ -318,7 +319,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ]);
       following = (followsRes.data ?? []).map((f: Row) => f.seller_id);
       savedSearches = (searchesRes.data ?? []).map((r: Row) => ({
-        id: r.id, query: r.query ?? '', vehicleType: r.vehicle_type ?? null, country: r.country ?? null, city: r.city ?? '', seenAt: new Date(r.seen_at).getTime(),
+        id: r.id, query: r.query ?? '', vehicleType: r.vehicle_type ?? null, country: r.country ? countryCode(r.country) : null, city: r.city ?? '', seenAt: new Date(r.seen_at).getTime(),
       }));
       const blocksRes = await supabase.from('blocks').select('blocked_id');
       blocked = (blocksRes.data ?? []).map((b: Row) => b.blocked_id);

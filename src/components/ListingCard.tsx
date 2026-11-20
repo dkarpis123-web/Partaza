@@ -3,7 +3,8 @@ import React from 'react';
 import { Image, Pressable, View } from 'react-native';
 
 import { DefectBadge } from '@/components/ui';
-import { flagOf } from '@/services/match';
+import { useLang } from '@/i18n';
+import { countryName, flagOf } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
 import { CONDITION_LABELS, Listing } from '@/types';
@@ -26,6 +27,7 @@ export function deliveryText(listing: Listing): string {
 }
 
 export function ListingCard({ listing }: { listing: Listing }) {
+  useLang();
   const { userById } = useStore();
   const seller = userById(listing.sellerId);
   const hasDefects = listing.defects.length > 0;
@@ -52,7 +54,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
             {money(listing.price)}{' '}
             <Text style={{ fontSize: 12, fontWeight: '500', color: colors.muted }}>{listing.vat ? 'su PVM' : 'be PVM'}</Text>
           </Text>
-          <Text style={{ fontSize: 12, color: colors.muted }}>{CONDITION_LABELS[listing.condition]} · {flagOf(listing.country) ? `${flagOf(listing.country)} ` : ''}{listing.city}, {listing.country}</Text>
+          <Text style={{ fontSize: 12, color: colors.muted }}>{CONDITION_LABELS[listing.condition]} · {flagOf(listing.country) ? `${flagOf(listing.country)} ` : ''}{listing.city}, {countryName(listing.country)}</Text>
           <Text style={{ fontSize: 12, color: colors.muted }}>
             {seller.kind === 'business' ? 'Verslas' : 'Privatus'}{seller.reviews > 0 ? ` · ${seller.rating.toFixed(1).replace('.', ',')}` : ''}
           </Text>

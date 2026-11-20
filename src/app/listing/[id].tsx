@@ -6,6 +6,7 @@ import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
+import { countryLabel } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
@@ -192,7 +193,7 @@ export default function ListingScreen() {
         {listing.wholeVehicle ? <Row label="Parduodama" value="Visas automobilis dalims" /> : null}
         {listing.fits ? <Row label="Tinka" value={listing.fits} /> : null}
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
-        <Row label="Vieta" value={`${listing.city}, ${listing.country}`} />
+        <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
       </Card>
 

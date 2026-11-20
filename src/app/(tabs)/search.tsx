@@ -1,13 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
-import { detectCountry } from '@/services/geo';
+import { countryLabel, countryName, detectCountry, locate } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
-import { flagOf, newMatches, normalize } from '@/services/match';
+import { newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -79,12 +79,15 @@ export default function SearchScreen() {
 
   const countries = useMemo(() => Array.from(new Set(listings.map((l) => l.country))).sort(), [listings]);
   // Once the listings are known, start in the visitor's own country if there is anything to show there.
-  const [home] = useState(detectCountry);
-  const [suggested, setSuggested] = useState(false);
+  const [home, setHome] = useState(detectCountry);
+  useEffect(() => {
+    locate().then((place) => setHome(place.country));
+  }, []);
+  const [suggestedFor, setSuggestedFor] = useState<string | null | undefined>(undefined);
   const [editPlace, setEditPlace] = useState(false);
-  if (!suggested && countries.length > 0) {
-    setSuggested(true);
-    if (home && countries.includes(home) && country === null) setCountry(home);
+  if (countries.length > 0 && suggestedFor !== home) {
+    setSuggestedFor(home);
+    if (home && countries.includes(home) && (country === null || country === suggestedFor)) setCountry(home);
   }
 
   const current = { query: query.trim(), vehicleType: type, country, city: city.trim() };
@@ -98,7 +101,7 @@ export default function SearchScreen() {
     setSaveProblem((await saveSearch(current)) ?? '');
   };
   const searchLabel = (s: SavedSearch) =>
-    [s.query, s.vehicleType ? tr(VEHICLE_LABELS[s.vehicleType]) : '', [s.city, s.country ? tr(s.country) : ''].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || tr('Visi skelbimai');
+    [s.query, s.vehicleType ? tr(VEHICLE_LABELS[s.vehicleType]) : '', [s.city, s.country ? countryName(s.country) : ''].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || tr('Visi skelbimai');
   const openSaved = (s: SavedSearch) => {
     setQuery(s.query);
     setType(s.vehicleType);
@@ -127,7 +130,7 @@ export default function SearchScreen() {
     });
     return filtered.sort((a, b) => {
       if (sort === 'newest') return b.createdAt - a.createdAt;
-      if (sort === 'place') return `${a.country} ${a.city}`.localeCompare(`${b.country} ${b.city}`, 'lt');
+      if (sort === 'place') return `${countryName(a.country)} ${a.city}`.localeCompare(`${countryName(b.country)} ${b.city}`, 'lt');
       return totalPrice(a) - totalPrice(b);
     });
   }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort]);
@@ -195,7 +198,7 @@ export default function SearchScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 13, color: colors.muted }}>Ieškoma čia</Text>
             <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>
-              {`${country ? `${flagOf(country)} ${tr(country)}` : tr('Visos šalys')}${city.trim() ? ` · ${city.trim()}` : ''}`}
+              {`${country ? countryLabel(country) : tr('Visos šalys')}${city.trim() ? ` · ${city.trim()}` : ''}`}
             </Text>
           </View>
           <Button label={editPlace ? 'Gerai' : 'Keisti'} kind="outline" onPress={() => setEditPlace((v) => !v)} />
@@ -205,7 +208,7 @@ export default function SearchScreen() {
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <Chip label="Visos šalys" selected={country === null} onPress={() => setCountry(null)} />
               {countries.map((c) => (
-                <Chip key={c} label={`${flagOf(c)} ${tr(c)}`} selected={country === c} onPress={() => setCountry(c)} />
+                <Chip key={c} label={countryLabel(c)} selected={country === c} onPress={() => setCountry(c)} />
               ))}
             </View>
             <TextInput
