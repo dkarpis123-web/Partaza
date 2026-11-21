@@ -4,7 +4,7 @@ import { Image, Text, View } from 'react-native';
 import type { Lang } from '@/i18n';
 import { colors } from '@/theme';
 
-/** Flags drawn by scripts/make-flags.py. Russian has no flag on purpose: its code is shown in a plain box. */
+/** Flags drawn by scripts/make-flags.py; a language without one shows its code in a plain box. */
 const FLAGS: Partial<Record<Lang, number>> = {
   lt: require('../../assets/flags/lt.png'),
   en: require('../../assets/flags/en.png'),
@@ -12,6 +12,9 @@ const FLAGS: Partial<Record<Lang, number>> = {
   et: require('../../assets/flags/et.png'),
   pl: require('../../assets/flags/pl.png'),
   de: require('../../assets/flags/de.png'),
+  ru: require('../../assets/flags/ru.png'),
+  es: require('../../assets/flags/es.png'),
+  fr: require('../../assets/flags/fr.png'),
 };
 
 /** A small flag for a language, 3:2, with a thin edge so white stripes stay visible. */

@@ -8,7 +8,7 @@ import { allowLocation, declineLocation, useGeo } from '@/services/geo';
 import { colors, radius } from '@/theme';
 
 /** The language most people in a country read, among the ones the app has. */
-const BY_COUNTRY: Record<string, Lang> = { LT: 'lt', LV: 'lv', EE: 'et', PL: 'pl', DE: 'de', AT: 'de', CH: 'de', RU: 'ru', BY: 'ru', UA: 'ru', KZ: 'ru' };
+const BY_COUNTRY: Record<string, Lang> = { LT: 'lt', LV: 'lv', EE: 'et', PL: 'pl', DE: 'de', AT: 'de', CH: 'de', RU: 'ru', BY: 'ru', UA: 'ru', KZ: 'ru', ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es', PE: 'es', FR: 'fr', BE: 'fr', LU: 'fr', MC: 'fr' };
 
 /**
  * Two questions on the first visit, one after the other, and nothing is assumed until answered:

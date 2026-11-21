@@ -45,7 +45,7 @@ export default function HomeScreen() {
           onSubmitEditing={search}
           returnKeyType="search"
           style={{
-            flex: 1, minHeight: 48, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border,
+            flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border,
             borderRadius: radius.md, backgroundColor: colors.surface, fontSize: 15, color: colors.ink,
           }}
         />

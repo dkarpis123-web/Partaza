@@ -155,7 +155,7 @@ export default function ChatScreen() {
             value={text}
             onChangeText={setText}
             onSubmitEditing={send}
-            style={{ flex: 1, minHeight: 48, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, backgroundColor: colors.bg, fontSize: 15, color: colors.ink }}
+            style={{ flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, backgroundColor: colors.bg, fontSize: 15, color: colors.ink }}
           />
           <Button label="Siųsti" kind="dark" onPress={send} disabled={!text.trim() || busy} />
         </View>

@@ -74,7 +74,7 @@ function toolInput(result: Json, name: string): Json {
 }
 
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
-const LANGUAGE_NAMES: Record<string, string> = { lt: 'Lithuanian', en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German' };
+const LANGUAGE_NAMES: Record<string, string> = { lt: 'Lithuanian', en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German', es: 'Spanish', fr: 'French' };
 /** The language the app is shown in; texts written by the AI come back in it. */
 const language = (lang: unknown) => LANGUAGE_NAMES[typeof lang === 'string' ? lang : ''] ?? 'Lithuanian';
 

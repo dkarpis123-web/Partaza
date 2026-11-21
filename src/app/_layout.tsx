@@ -5,6 +5,7 @@ import { Platform, View } from 'react-native';
 
 import { AuthLinkHandler } from '@/components/AuthLinkHandler';
 import { BackButton } from '@/components/BackButton';
+import { DevBanner } from '@/components/DevBanner';
 import { Brand } from '@/components/Brand';
 import { FirstVisit } from '@/components/FirstVisit';
 import { HeaderRight } from '@/components/HeaderRight';
@@ -38,40 +39,42 @@ export default function RootLayout() {
   return (
     <StoreProvider>
       <StatusBar style="dark" />
-      <Stack
-        screenOptions={({ route }) => ({
-          headerTintColor: colors.ink,
-          headerStyle: { backgroundColor: colors.surface },
-          headerTitleStyle: { fontWeight: '700' },
-          contentStyle: { backgroundColor: colors.bg },
-          headerBackVisible: false,
-          // The logo and the language switch stay in the same place on every screen.
-          headerLeft: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: Platform.OS === 'web' ? 14 : 0 }}>
-              <Brand />
-              <BackButton />
-            </View>
-          ),
-          headerTitle: () => null,
-          headerRight: () => <HeaderRight title={TITLES[route.name] ?? ''} />,
-        })}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="listing/[id]" options={{ title: tr('Skelbimas') }} />
-        <Stack.Screen name="offer/[id]" options={{ title: tr('Siūlyti kainą') }} />
-        <Stack.Screen name="chat/[id]" options={{ title: tr('Pokalbis') }} />
-        <Stack.Screen name="sell/review" options={{ title: tr('Patikrinkite skelbimą') }} />
-        <Stack.Screen name="register" options={{ title: tr('Registracija') }} />
-        <Stack.Screen name="dashboard" options={{ title: tr('Mano prekyba') }} />
-        <Stack.Screen name="buy/[id]" options={{ title: tr('Pirkimas') }} />
-        <Stack.Screen name="payment/[id]" options={{ title: tr('Užsakymas') }} />
-        <Stack.Screen name="payouts" options={{ title: tr('Mokėjimai ir išmokos') }} />
-        <Stack.Screen name="orders" options={{ title: tr('Užsakymai') }} />
-        <Stack.Screen name="app" options={{ title: tr('Programėlė') }} />
-        <Stack.Screen name="seller/[id]" options={{ title: tr('Pardavėjas') }} />
-        <Stack.Screen name="reset" options={{ title: tr('Slaptažodis') }} />
-        <Stack.Screen name="terms" options={{ title: tr('Taisyklės') }} />
-        <Stack.Screen name="privacy" options={{ title: tr('Privatumas') }} />
-      </Stack>
+      <DevBanner>
+        <Stack
+          screenOptions={({ route }) => ({
+            headerTintColor: colors.ink,
+            headerStyle: { backgroundColor: colors.surface },
+            headerTitleStyle: { fontWeight: '700' },
+            contentStyle: { backgroundColor: colors.bg },
+            headerBackVisible: false,
+            // The logo and the language switch stay in the same place on every screen.
+            headerLeft: () => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: Platform.OS === 'web' ? 14 : 0 }}>
+                <Brand />
+                <BackButton />
+              </View>
+            ),
+            headerTitle: () => null,
+            headerRight: () => <HeaderRight title={TITLES[route.name] ?? ''} />,
+          })}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="listing/[id]" options={{ title: tr('Skelbimas') }} />
+          <Stack.Screen name="offer/[id]" options={{ title: tr('Siūlyti kainą') }} />
+          <Stack.Screen name="chat/[id]" options={{ title: tr('Pokalbis') }} />
+          <Stack.Screen name="sell/review" options={{ title: tr('Patikrinkite skelbimą') }} />
+          <Stack.Screen name="register" options={{ title: tr('Registracija') }} />
+          <Stack.Screen name="dashboard" options={{ title: tr('Mano prekyba') }} />
+          <Stack.Screen name="buy/[id]" options={{ title: tr('Pirkimas') }} />
+          <Stack.Screen name="payment/[id]" options={{ title: tr('Užsakymas') }} />
+          <Stack.Screen name="payouts" options={{ title: tr('Mokėjimai ir išmokos') }} />
+          <Stack.Screen name="orders" options={{ title: tr('Užsakymai') }} />
+          <Stack.Screen name="app" options={{ title: tr('Programėlė') }} />
+          <Stack.Screen name="seller/[id]" options={{ title: tr('Pardavėjas') }} />
+          <Stack.Screen name="reset" options={{ title: tr('Slaptažodis') }} />
+          <Stack.Screen name="terms" options={{ title: tr('Taisyklės') }} />
+          <Stack.Screen name="privacy" options={{ title: tr('Privatumas') }} />
+        </Stack>
+      </DevBanner>
       <FirstVisit />
       <AuthLinkHandler />
       <Splash />

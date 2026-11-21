@@ -1359,3 +1359,7 @@ drop trigger if exists thread_rate_limit on public.threads;
 create trigger thread_rate_limit before insert on public.threads for each row execute function public.thread_rate_limit();
 drop trigger if exists report_rate_limit on public.reports;
 create trigger report_rate_limit before insert on public.reports for each row execute function public.report_rate_limit();
+
+-- 34. Spanish and French translations of listings.
+alter table public.listing_translations drop constraint if exists listing_translations_lang_check;
+alter table public.listing_translations add constraint listing_translations_lang_check check (lang = any (array['lt','en','lv','et','pl','ru','de','es','fr']));

@@ -55,6 +55,8 @@ const WORDS: Record<string, { delivery: string; oneParcel: string; protection: s
   pl: { delivery: 'Dostawa', oneParcel: 'Dostawa (jedna przesyłka)', protection: 'Ochrona kupującego', admin: 'Opłata administracyjna' },
   ru: { delivery: 'Доставка', oneParcel: 'Доставка (одна посылка)', protection: 'Защита покупателя', admin: 'Административный сбор' },
   de: { delivery: 'Lieferung', oneParcel: 'Lieferung (ein Paket)', protection: 'Käuferschutz', admin: 'Bearbeitungsgebühr' },
+  es: { delivery: 'Envío', oneParcel: 'Envío (un paquete)', protection: 'Protección al comprador', admin: 'Tarifa de gestión' },
+  fr: { delivery: 'Livraison', oneParcel: 'Livraison (un colis)', protection: 'Protection acheteur', admin: 'Frais de gestion' },
 };
 const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
 

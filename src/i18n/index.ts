@@ -1,4 +1,4 @@
-// Seven languages. The app is written in Lithuanian; other languages are produced when text is shown:
+// Nine languages. The app is written in Lithuanian; other languages are produced when text is shown:
 // every piece of text passes through tr(), which looks it up in that language's dictionary (src/i18n/<lang>.ts).
 // Text missing in a language falls back to English, then to Lithuanian, so a missing entry never breaks a screen.
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,12 +6,14 @@ import { useSyncExternalStore } from 'react';
 
 import * as DE from './de';
 import { EN, EN_PATTERNS } from './en';
+import * as ES from './es';
 import * as ET from './et';
+import * as FR from './fr';
 import * as LV from './lv';
 import * as PL from './pl';
 import * as RU from './ru';
 
-export type Lang = 'lt' | 'en' | 'lv' | 'et' | 'pl' | 'ru' | 'de';
+export type Lang = 'lt' | 'en' | 'lv' | 'et' | 'pl' | 'ru' | 'de' | 'es' | 'fr';
 
 /** Every language, in the order shown in the picker, with its own name. */
 export const LANGUAGES: { code: Lang; name: string; short: string }[] = [
@@ -22,6 +24,8 @@ export const LANGUAGES: { code: Lang; name: string; short: string }[] = [
   { code: 'pl', name: 'Polski', short: 'PL' },
   { code: 'ru', name: 'Русский', short: 'RU' },
   { code: 'de', name: 'Deutsch', short: 'DE' },
+  { code: 'es', name: 'Español', short: 'ES' },
+  { code: 'fr', name: 'Français', short: 'FR' },
 ];
 const isLang = (value: unknown): value is Lang => LANGUAGES.some((l) => l.code === value);
 
@@ -32,6 +36,8 @@ const OTHER: Record<Exclude<Lang, 'lt' | 'en'>, { dict: Record<string, string>; 
   pl: { dict: PL.DICT, patterns: templated(PL.DICT, PL.TEMPLATES) },
   ru: { dict: RU.DICT, patterns: templated(RU.DICT, RU.TEMPLATES) },
   de: { dict: DE.DICT, patterns: templated(DE.DICT, DE.TEMPLATES) },
+  es: { dict: ES.DICT, patterns: templated(ES.DICT, ES.TEMPLATES) },
+  fr: { dict: FR.DICT, patterns: templated(FR.DICT, FR.TEMPLATES) },
 };
 
 /** The English patterns' expressions with a language's sentence templates: $n = the piece as it is, %n = translated. */

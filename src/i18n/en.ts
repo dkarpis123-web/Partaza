@@ -42,6 +42,7 @@ export const EN: Record<string, string> = {
   'Dalis, kodas arba modelis': 'Part, code or model',
   'Ieškoti': 'Search',
   'Bandomoji versija: skelbimai pavyzdiniai, niekas neparduodama ir niekur nesaugoma.': 'Demo version: the listings are examples, nothing is sold and nothing is saved.',
+  'Kūrimo režimas: platforma dar kuriama, mokėjimai tik bandomieji.': 'Development mode: the platform is still being built, payments are test only.',
   'Nauji skelbimai': 'New listings',
   'Dalys visam transportui': 'Parts for every vehicle',
   'Nuotraukos nėra': 'No photo',

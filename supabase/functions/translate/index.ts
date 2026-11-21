@@ -11,7 +11,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 type Json = Record<string, any>;
 
 const KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
-const LANGS: Record<string, string> = { lt: 'Lithuanian', en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German' };
+const LANGS: Record<string, string> = { lt: 'Lithuanian', en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German', es: 'Spanish', fr: 'French' };
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

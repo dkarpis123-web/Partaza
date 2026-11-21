@@ -45,6 +45,7 @@ export const DICT: Record<string, string> = {
   "Dalis, kodas arba modelis": "Osa, kood või mudel",
   "Ieškoti": "Otsi",
   "Bandomoji versija: skelbimai pavyzdiniai, niekas neparduodama ir niekur nesaugoma.": "Demoversioon: kuulutused on näited, midagi ei müüda ja midagi ei salvestata.",
+  "Kūrimo režimas: platforma dar kuriama, mokėjimai tik bandomieji.": "Arendusrežiim: platvorm on alles valmimisel, maksed on ainult testmaksed.",
   "Nauji skelbimai": "Uued kuulutused",
   "Dalys visam transportui": "Osad igale sõidukile",
   "Nuotraukos nėra": "Foto puudub",

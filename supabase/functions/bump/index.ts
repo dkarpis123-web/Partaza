@@ -57,6 +57,8 @@ const PROMOTE: Record<string, (days: number) => string> = {
   lt: (d) => `skelbimo iškėlimas ${d} d.`, en: (d) => `listing promotion, ${d} days`, lv: (d) => `sludinājuma izcelšana, ${d} d.`,
   et: (d) => `kuulutuse esiletõstmine, ${d} päeva`, pl: (d) => `wyróżnienie ogłoszenia, ${d} dni`, ru: (d) => `продвижение объявления, ${d} дн.`,
   de: (d) => `Hervorhebung der Anzeige, ${d} Tage`,
+  es: (d) => `destacar el anuncio, ${d} días`,
+  fr: (d) => `mise en avant de l'annonce, ${d} jours`,
 };
 
 /** The fee in cents: 5 % of the price, at least the smallest amount a card payment can be. */

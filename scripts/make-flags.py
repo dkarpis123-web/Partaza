@@ -1,4 +1,4 @@
-"""Small language flags for the language menu (3x of 24x16). Russian has none on purpose: a plain RU box is shown."""
+"""Small language flags for the language menu (3x of 24x16)."""
 from PIL import Image, ImageDraw
 W, H = 72, 48
 def stripes(name, colors):
@@ -9,6 +9,13 @@ stripes('lt', ['#FDB913', '#006A44', '#C1272D'])
 stripes('et', ['#0072CE', '#000000', '#FFFFFF'])
 stripes('pl', ['#FFFFFF', '#DC143C'])
 stripes('de', ['#000000', '#DD0000', '#FFCE00'])
+stripes('ru', ['#FFFFFF', '#0039A6', '#D52B1E'])
+# France: vertical blue, white, red
+im = Image.new('RGB', (W, H)); d = ImageDraw.Draw(im)
+for i, c in enumerate(['#002654', '#FFFFFF', '#CE1126']): d.rectangle([round(i*W/3), 0, round((i+1)*W/3), H], fill=c)
+im.save('assets/flags/fr.png')
+# Spain: red, yellow (double), red - without the coat of arms, which is unreadable at this size
+im = Image.new('RGB', (W, H), '#AA151B'); d = ImageDraw.Draw(im); d.rectangle([0, H//4, W, H*3//4 - 1], fill='#F1BF00'); im.save('assets/flags/es.png')
 # Latvia: carmine, white, carmine in 2:1:2
 im = Image.new('RGB', (W, H), '#9E3039'); d = ImageDraw.Draw(im); d.rectangle([0, round(H*2/5), W, round(H*3/5)-1], fill='#FFFFFF'); im.save('assets/flags/lv.png')
 # United Kingdom, drawn large and scaled down for smooth edges

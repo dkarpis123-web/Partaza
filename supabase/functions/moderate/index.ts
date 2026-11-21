@@ -54,7 +54,7 @@ async function judge(listing: Json, lang: unknown): Promise<{ ok: boolean; reaso
           type: 'object',
           properties: {
             verdict: { type: 'string', enum: ['approve', 'reject'] },
-            reason: { type: 'string', description: `If rejected: one or two plain sentences in ${({ en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German' } as Record<string, string>)[String(lang)] ?? 'Lithuanian'} telling the seller what is wrong and what to fix. Empty if approved.` },
+            reason: { type: 'string', description: `If rejected: one or two plain sentences in ${({ en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German', es: 'Spanish', fr: 'French' } as Record<string, string>)[String(lang)] ?? 'Lithuanian'} telling the seller what is wrong and what to fix. Empty if approved.` },
           },
           required: ['verdict', 'reason'],
         },
