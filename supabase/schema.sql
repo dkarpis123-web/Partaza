@@ -1267,3 +1267,21 @@ revoke execute on function public.payment_order_items_release() from public, ano
 drop trigger if exists payment_order_items_release on public.payment_orders;
 create trigger payment_order_items_release after update of status on public.payment_orders
   for each row when (old.status is distinct from new.status) execute function public.payment_order_items_release();
+
+-- ---------------------------------------------------------------------------
+-- 30. Translations of a listing's own texts into a buyer's language, made once per listing,
+-- language and text version by the translate function; only that function reads and writes them.
+-- ---------------------------------------------------------------------------
+create table if not exists public.listing_translations (
+  listing_id uuid not null references public.listings (id) on delete cascade,
+  lang text not null check (lang in ('lt', 'en', 'lv', 'et', 'pl', 'ru', 'de')),
+  source_hash text not null,
+  title text not null,
+  description text not null default '',
+  fits text not null default '',
+  same_language boolean not null default false,
+  created_at timestamptz not null default now(),
+  primary key (listing_id, lang)
+);
+alter table public.listing_translations enable row level security;
+revoke all on public.listing_translations from anon, authenticated;

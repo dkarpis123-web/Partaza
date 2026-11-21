@@ -134,6 +134,8 @@ interface Store extends State {
   /** Starts a payment; resolves to the address of the payment page. */
   /** extraIds: more listings of the same seller sent in the same parcel, with one delivery charge. */
   buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string, extraIds?: string[]) => Promise<{ url?: string; error?: string }>;
+  /** The listing's own title and description in the language the app is shown in (made once, then kept). */
+  translateListing: (listingId: string) => Promise<{ title?: string; description?: string; same?: boolean; error?: string }>;
   /** Opens the payment for promoting the seller's own listing (5 % of its price, 7 days). */
   bumpStart: (listingId: string) => Promise<{ url?: string; error?: string }>;
   /** Checks with the server whether a promotion payment went through, then reloads the listings. */
@@ -1182,6 +1184,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return error ? explain(error) : null;
     };
 
+    const translateListing: Store['translateListing'] = async (listingId) => {
+      if (!supabase) return { error: 'Bandomojoje versijoje vertimas neveikia.' };
+      try {
+        const { data, error } = await supabase.functions.invoke('translate', { body: { listing_id: listingId, lang: getLang() } });
+        if (error || !data || data.error) return { error: 'Nepavyko išversti. Bandykite dar kartą.' };
+        return { title: String(data.title ?? ''), description: String(data.description ?? ''), same: !!data.same_language };
+      } catch {
+        return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+      }
+    };
+
     const bumpStart: Store['bumpStart'] = async (listingId) => {
       if (!supabase) return { error: 'Bandomojoje versijoje iškėlimas neveikia.' };
       try {
@@ -1266,7 +1279,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, bumpStart, bumpSync, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, translateListing, bumpStart, bumpSync, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

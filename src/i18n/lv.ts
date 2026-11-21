@@ -3,6 +3,14 @@
 // Anything missing here is shown in English (src/i18n/en.ts).
 
 export const DICT: Record<string, string> = {
+  // Listing translation (written by hand, 2026-11-21)
+  "Verčiama…": "Tulko…",
+  "Rodyti originalą": "Rādīt oriģinālu",
+  "Rodyti vertimą": "Rādīt tulkojumu",
+  "Skelbimas jau parašytas jūsų kalba.": "Sludinājums jau ir jūsu valodā.",
+  "Išversta automatiškai – numeriai ir kodai palikti kaip parašė pardavėjas.": "Tulkots automātiski – numuri un kodi atstāti tā, kā tos rakstīja pārdevējs.",
+  "Nepavyko išversti. Bandykite dar kartą.": "Neizdevās iztulkot. Mēģiniet vēlreiz.",
+  "Bandomojoje versijoje vertimas neveikia.": "Demo versijā tulkošana nedarbojas.",
   "Skelbimas": "Sludinājums",
   "Siūlyti kainą": "Piedāvāt cenu",
   "Pokalbis": "Tērzēšana",

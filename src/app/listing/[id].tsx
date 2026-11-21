@@ -10,7 +10,7 @@ import { fitVerdict, parseFitment, yearsText } from '@/services/fitment';
 import { CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, useDestination, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
-import { tr } from '@/i18n';
+import { tr, useLang } from '@/i18n';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 import { Text } from '@/components/Text';
 import { AiReview } from '@/components/AiReview';
@@ -24,8 +24,13 @@ export default function ListingScreen() {
   const { place } = useGeo();
   const dest = useDestination().country;
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, checkListing, blockUser, myCar, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
+  const { listingById, userById, me, registered, live, ready, translateListing, openThread, sendText, report, markSold, updatePhotos, checkListing, blockUser, myCar, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
   const [buying, setBuying] = useState(false);
+  // The seller's own words in the reader's language, on request; null shows the original.
+  const [translated, setTranslated] = useState<{ id: string; lang: string; title: string; description: string; same: boolean } | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState('');
+  const lang = useLang();
   const [ordering, setOrdering] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [photoDraft, setPhotoDraft] = useState<string[] | null>(null);
@@ -91,6 +96,10 @@ export default function ListingScreen() {
   const verdict = myCar ? fitVerdict(listing, myCar) : 'no';
   const carName = myCar ? `${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}${myCar.year ? ` ${myCar.year}` : ''}` : '';
   const fitRows = parseFitment(listing.fits);
+  // A translation counts only for this listing and the language it was made for.
+  const showing = !!translated && translated.id === listing.id && translated.lang === lang;
+  const shownTitle = showing && translated ? translated.title || listing.title : listing.title;
+  const shownDescription = showing && translated ? translated.description || listing.description : listing.description;
   const editable = status === 'active' || status === 'pending' || status === 'rejected';
   // The price the buyer would pay: an offer the seller (or the buyer) already accepted, otherwise the asking price.
   const myThread = threadForListing(listing.id);
@@ -217,7 +226,27 @@ export default function ListingScreen() {
       {mine && live && editable && photoDraft === null ? <AiReview listing={listing} /> : null}
       {mine && live && status === 'active' ? <BumpBox listing={listing} justPaid={bump === 'paid'} /> : null}
 
-      <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
+      <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{shownTitle}</Text>
+      {live && !mine ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <Button
+            label={translating ? 'Verčiama…' : showing ? 'Rodyti originalą' : 'Rodyti vertimą'}
+            kind="outline"
+            disabled={translating}
+            onPress={async () => {
+              if (showing) return setTranslated(null);
+              setTranslating(true);
+              setTranslateError('');
+              const answer = await translateListing(listing.id);
+              setTranslating(false);
+              if (answer.error) return setTranslateError(answer.error);
+              setTranslated({ id: listing.id, lang, title: answer.title ?? '', description: answer.description ?? '', same: !!answer.same });
+            }}
+          />
+          {showing ? <Muted>{translated?.same ? 'Skelbimas jau parašytas jūsų kalba.' : 'Išversta automatiškai – numeriai ir kodai palikti kaip parašė pardavėjas.'}</Muted> : null}
+          {translateError ? <Muted>{translateError}</Muted> : null}
+        </View>
+      ) : null}
       {mine ? null : (
         <Button
           label={favorites.includes(listing.id) ? 'Įsiminta – pašalinti' : 'Įsiminti skelbimą'}
@@ -253,7 +282,7 @@ export default function ListingScreen() {
       )}
 
       <Card style={{ gap: 0 }}>
-        {listing.description ? <Text style={{ fontSize: 15, lineHeight: 23, color: colors.ink, marginBottom: 8 }}>{listing.description}</Text> : null}
+        {shownDescription ? <Text style={{ fontSize: 15, lineHeight: 23, color: colors.ink, marginBottom: 8 }}>{shownDescription}</Text> : null}
         <Row label="Būklė" value={CONDITION_LABELS[listing.condition]} />
         <Row label="Transportas" value={`${VEHICLE_LABELS[listing.vehicleType]}${listing.classic ? ' · senovinis' : ''}${listing.motorsport ? ' · automotosportas' : ''}`} />
         {listing.wholeVehicle ? <Row label="Parduodama" value="Visas automobilis dalims" /> : null}
