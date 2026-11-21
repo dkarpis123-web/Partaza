@@ -409,7 +409,7 @@ async function connectStart(admin: SupabaseClient, user: Json, site: string, cou
     account: row.stripe_account_id,
     use_case: {
       type: 'account_onboarding',
-      account_onboarding: { configurations: ['recipient'], refresh_url: `${site}/payouts?again=1`, return_url: `${site}/payouts?done=1` },
+      account_onboarding: { refresh_url: `${site}/payouts?again=1`, return_url: `${site}/payouts?done=1` },
     },
   });
   return { url: link.url, ready: false };
