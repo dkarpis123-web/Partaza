@@ -102,7 +102,7 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
             properties: {
               candidates: {
                 type: 'array',
-                description: 'What the sources say this number is, best-supported first, at most 3. One entry if the sources agree. Empty if no page shows this number.',
+                description: 'What the sources say this number is, best-supported first, at most 3. One entry if the sources agree. Empty only if no page shows this number or its base number.',
                 items: {
                   type: 'object',
                   properties: {
@@ -125,6 +125,8 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
           `From the photo the part looks like: ${guess || '(unknown)'} - this is only a guess from its shape and may be wrong.${hint ? `\nOther clues: ${hint}` : ''}\n\n` +
           `Find out what part this number really is and which vehicles (with production years) it fits. Search the web for the number both ways - with its spaces ("${oem}") and without ("${compact}") - ` +
           `and, if results are thin, with the manufacturer's name, on parts catalogues, dismantlers and marketplaces. ` +
+          `Many makers end the number with a revision or colour suffix (for example "-00-B", a trailing letter, or a last digit group): if the full number gives nothing, search it without that suffix too - ` +
+          `a page showing the same base number with another revision is the same part and counts as a source. Keep searching with different wordings until the searches are used up before reporting nothing. ` +
           `Read what the pages that show this exact number call the part. The number decides: if the sources name a different part than the photo guess, the sources are right. ` +
           `If the sources agree, give one candidate. If they name different parts, give each as its own candidate with how many pages support it - do not pick one by guessing. ` +
           `Ignore pages about other numbers. Then call the report_part tool exactly once (do not answer in plain text).`,
@@ -141,6 +143,29 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
     console.error('ai: number lookup failed', (error as Error).message);
     return [];
   }
+}
+
+const bare = (value: string) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+/**
+ * Barcode and QR contents that can be a part number, best first. Labels prefix each value with a data
+ * identifier - "(P)" or "(1P)" is the part number, "(1T)", "(S)", "(Q)", "(V)" are lot, serial, quantity
+ * and supplier, which say nothing about what the part is. The identifier is dropped; anything equal to
+ * the number already looked up is skipped.
+ */
+function partCodes(codes: string[], number: string): string[] {
+  const known = bare(number);
+  const ranked: { code: string; rank: number }[] = [];
+  for (const raw of codes) {
+    const tagged = raw.trim().match(/^[\[(]\s*(\d{0,2}[A-Za-z])\s*[\])]\s*(.+)$/);
+    const id = tagged ? tagged[1].toUpperCase() : '';
+    if (id && !['P', '1P', '30P'].includes(id)) continue;
+    const code = (tagged ? tagged[2] : raw).trim();
+    const key = bare(code);
+    if (key.length < 5 || key === known || /^https?:/i.test(code) || ranked.some((r) => bare(r.code) === key)) continue;
+    ranked.push({ code, rank: id ? 0 : 1 });
+  }
+  return ranked.sort((a, b) => a.rank - b.rank).map((r) => r.code);
 }
 
 const sameText = (a: string, b: string) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -237,7 +262,7 @@ async function recognize(body: Json): Promise<Json> {
     // Codes read by the phone from barcodes and QR codes, then other numbers printed on the labels.
     const scanned = (Array.isArray(body.codes) ? body.codes : []).map((c: unknown) => text(c, 120));
     const printed = (Array.isArray(found.codes) ? found.codes : []).map((c: unknown) => text(c, 60));
-    const tries = [...scanned, ...printed].filter((c, i, all) => c && c !== number && all.indexOf(c) === i).slice(0, 2);
+    const tries = partCodes([...scanned, ...printed], number).slice(0, 2);
     for (const code of tries) {
       candidates = await lookupNumber(code, seen, body.lang, text(found.fits, 200));
       if (candidates.length > 0) {

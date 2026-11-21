@@ -1184,3 +1184,9 @@ revoke all on public.ai_feedback from anon, authenticated;
 grant insert on public.ai_feedback to authenticated;
 drop policy if exists ai_feedback_write on public.ai_feedback;
 create policy ai_feedback_write on public.ai_feedback for insert to authenticated with check (user_id = (select auth.uid()));
+
+-- 25–26. Trigger functions are run by the database only; nobody needs to call them through the API.
+-- has_thread_on stays callable by visitors: the listings read policy uses it for everyone.
+revoke execute on function public.dispute_message_limit() from public, anon, authenticated;
+revoke execute on function public.listing_vat_guard() from public, anon, authenticated;
+grant execute on function public.has_thread_on(uuid) to anon, authenticated;
