@@ -17,6 +17,10 @@ export interface Recognition {
   fits: string;
   vehicleType: VehicleType;
   suggestedDefects: string[];
+  /** true when the title and fit come from looking the part number up, not from the look of the part. */
+  byNumber?: boolean;
+  /** Other readings the seller can choose instead: other results for the number, or what the photo alone suggested. */
+  alternatives?: { title: string; fits: string; from: 'number' | 'photo' }[];
   /** true while no real model is connected and the fields are sample values. */
   isDemo: boolean;
 }

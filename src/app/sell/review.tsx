@@ -142,8 +142,11 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (proposal.fits) setFits(proposal.fits);
     setVehicleType(proposal.vehicleType);
     if (proposal.suggestedDefects.length > 0) setDefects(proposal.suggestedDefects);
+    setChoices(proposal.byNumber || (proposal.alternatives?.length ?? 0) > 0 ? [{ title: proposal.title, fits: proposal.fits, from: proposal.byNumber ? 'number' : 'photo' }, ...(proposal.alternatives ?? [])] : []);
     setProposal(null);
   };
+  // What the AI found for this part: the reading in the form first, then the others the seller may pick instead.
+  const [choices, setChoices] = useState<{ title: string; fits: string; from: 'number' | 'photo' }[]>([]);
   const [webPrices, setWebPrices] = useState<WebPrices | null>(null);
   const [webBusy, setWebBusy] = useState(false);
   const [webProblem, setWebProblem] = useState('');
@@ -168,6 +171,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       setVehicleType(r.vehicleType);
       setDefects(r.suggestedDefects);
       setIsDemo(r.isDemo);
+      setChoices(r.byNumber || (r.alternatives?.length ?? 0) > 0 ? [{ title: r.title, fits: r.fits, from: r.byNumber ? 'number' : 'photo' }, ...(r.alternatives ?? [])] : []);
     };
     if (!live) {
       recognizePart(initialPhotos).then((r) => {
@@ -323,6 +327,27 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       </View>
       {step === 0 ? (
         <>
+      {choices.length > 0 ? (
+        <Card style={{ borderColor: colors.accent, borderWidth: 2 }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>{choices.length > 1 ? 'DI rado kelis variantus – pasirinkite teisingą' : 'DI dalį nustatė pagal numerį'}</Text>
+          <Muted>{choices.length > 1 ? 'Pavadinimas ir tinkamumas parinkti pagal dalies numerį internete. Jei tai ne ta dalis, pasirinkite kitą variantą arba pataisykite patys.' : 'Pavadinimas ir tinkamumas paimti iš šaltinių, kuriuose rastas šis numeris. Patikrinkite, ar tai ta dalis.'}</Muted>
+          {choices.map((c) => {
+            const picked = title.trim() === c.title;
+            return (
+              <Pressable
+                key={`${c.from}-${c.title}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: picked }}
+                onPress={() => { setTitle(c.title); if (c.fits) setFits(c.fits); }}
+                style={{ padding: 10, borderRadius: 10, borderWidth: picked ? 2 : 1, borderColor: picked ? colors.ink : colors.border, backgroundColor: picked ? colors.accentSoft : colors.surface, gap: 2 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>{c.from === 'number' ? 'Pagal dalies numerį' : 'Pagal nuotrauką (spėjimas)'}</Text>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>{c.title}</Text>
+                {c.fits ? <Text style={{ fontSize: 13, color: colors.muted }}>{c.fits}</Text> : null}
+              </Pressable>
+            );
+          })}
+        </Card>
+      ) : null}
       {isDemo ? (
         <Notice tone="warn">Bandomoji versija: dalies atpažinimas dar neprijungtas, todėl laukai užpildyti pavyzdžiu. Pataisykite juos pagal savo dalį.</Notice>
       ) : aiNote && aiNote !== 'ok' ? (

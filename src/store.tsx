@@ -8,7 +8,7 @@ import { seedListings, seedUsers } from '@/data/seed';
 import { getLang } from '@/i18n';
 import type { Recognition, ShippingEstimate, WebPrices } from '@/services/ai';
 import { countryCode } from '@/services/geo';
-import type { Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, Review, SavedSearch, SellerKind, Thread, User } from '@/types';
+import type { DisputeKind, DisputeMessage, Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, Review, SavedSearch, SellerKind, Thread, User } from '@/types';
 
 /**
  * One store, two modes.
@@ -47,7 +47,7 @@ interface State {
   payReady: string[];
 }
 
-export type OrderStep = 'ship' | 'received' | 'confirm' | 'dispute' | 'cancel';
+export type OrderStep = 'ship' | 'received' | 'confirm' | 'dispute' | 'dispute_withdraw' | 'dispute_refund' | 'cancel';
 export interface PayoutStatus {
   /** false = payments are not switched on for the whole platform yet. */
   configured: boolean;
@@ -131,7 +131,10 @@ interface Store extends State {
   buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string) => Promise<{ url?: string; error?: string }>;
   /** Asks the server to check with the payment provider whether an order has been paid. */
   syncOrder: (orderId: string) => Result;
-  orderStep: (orderId: string, step: OrderStep, text?: string) => Result;
+  orderStep: (orderId: string, step: OrderStep, text?: string, kind?: DisputeKind) => Result;
+  /** Both sides' explanations in a dispute, oldest first. */
+  loadDispute: (orderId: string) => Promise<DisputeMessage[]>;
+  sendDispute: (orderId: string, body: string) => Result;
   payoutStatus: () => Promise<PayoutStatus>;
   /** Resolves to the address where the seller sets up (or manages) payouts. */
   startPayouts: () => Promise<{ url?: string; error?: string }>;
@@ -256,7 +259,7 @@ function toPaidOrder(row: Row): PaidOrder {
     id: row.id, listingId: row.listing_id ?? null, buyerId: row.buyer_id ?? '', sellerId: row.seller_id ?? '', title: row.title,
     itemAmount: row.item_amount / 100, shippingAmount: row.shipping_amount / 100, feeAmount: row.fee_amount / 100, total: row.total_amount / 100,
     delivery: row.delivery === 'pickup' ? 'pickup' : 'shipping', status: row.status, shipTo: row.ship_to ?? null,
-    tracking: row.tracking ?? '', disputeReason: row.dispute_reason ?? '', createdAt: new Date(row.created_at).getTime(),
+    tracking: row.tracking ?? '', disputeReason: row.dispute_reason ?? '', disputeKind: row.dispute_kind ?? null, createdAt: new Date(row.created_at).getTime(),
     paidAt: time(row.paid_at), shippedAt: time(row.shipped_at), receivedAt: time(row.received_at), releaseAt: time(row.release_at),
   };
 }
@@ -745,7 +748,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!data) return { photos: uploaded.urls, error };
       return {
         photos: uploaded.urls,
-        result: { title: data.title ?? '', oem: data.oem ?? '', fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false },
+        result: { title: data.title ?? '', oem: data.oem ?? '', fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
       };
     };
 
@@ -1159,8 +1162,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return answer.error ?? null;
     };
 
-    const orderStep: Store['orderStep'] = async (orderId, step, text) => {
-      const answer = await pay({ action: 'order_action', order_id: orderId, do: step, tracking: text, reason: text });
+    const loadDispute: Store['loadDispute'] = async (orderId) => {
+      if (!supabase) return [];
+      const { data } = await supabase.from('dispute_messages').select('id, author_id, body, created_at').eq('order_id', orderId).order('created_at');
+      return (data ?? []).map((r) => ({ id: r.id, authorId: r.author_id, body: r.body, createdAt: new Date(r.created_at).getTime() }));
+    };
+
+    const sendDispute: Store['sendDispute'] = async (orderId, body) => {
+      if (!supabase) return null;
+      const { error } = await supabase.from('dispute_messages').insert({ order_id: orderId, body: body.trim().slice(0, 2000) });
+      return error ? explain(error) : null;
+    };
+
+    const orderStep: Store['orderStep'] = async (orderId, step, text, kind) => {
+      const answer = await pay({ action: 'order_action', order_id: orderId, do: step, tracking: text, reason: text, kind });
       await refresh();
       return answer.error ?? null;
     };
@@ -1197,7 +1212,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

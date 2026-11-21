@@ -7,6 +7,7 @@
 //
 // One function, three kinds of callers:
 // - the app, as a signed-in user:   { action: 'connect_start' | 'connect_status' | 'checkout' | 'sync_order' | 'order_action', ... }
+//   (order_action: do = ship | received | confirm | dispute | dispute_withdraw | dispute_refund | cancel)
 // - Stripe, as a signed webhook:    header "Stripe-Signature" (needs STRIPE_WEBHOOK_SECRET)
 // - the database timer, no rights:  { action: 'release_due' } – takes no input, only releases what is already due
 //
@@ -43,6 +44,7 @@ const CHECK_DAYS = 5;
 const SILENT_DAYS = 14;
 /** If the seller never dispatches: days after payment until the buyer may cancel and be refunded. */
 const DISPATCH_DAYS = 7;
+const DISPUTE_KINDS = ['not_received', 'not_as_described', 'damaged', 'no_fit', 'other'];
 const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
 
 const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
@@ -534,7 +536,22 @@ async function orderAction(admin: SupabaseClient, user: Json, body: Json): Promi
       if (!buyer) return { error: 'not_allowed' };
       const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 2000) : '';
       if (reason.length < 10) return { error: 'reason_required' };
-      return move(['paid', 'shipped', 'received'], { status: 'disputed', dispute_reason: reason, release_at: null });
+      const kind = DISPUTE_KINDS.includes(body.kind) ? body.kind : 'other';
+      return move(['paid', 'shipped', 'received'], { status: 'disputed', dispute_reason: reason, dispute_kind: kind, release_at: null });
+    }
+    case 'dispute_withdraw': {
+      // The buyer says the problem is solved: the order goes back to where it was, with a short wait before the money is released.
+      if (!buyer) return { error: 'not_allowed' };
+      if (!order.shipped_at) return move(['disputed'], { status: 'paid', release_at: null });
+      if (!order.received_at) return move(['disputed'], { status: 'shipped', release_at: days(SILENT_DAYS) });
+      return move(['disputed'], { status: 'received', release_at: days(2) });
+    }
+    case 'dispute_refund': {
+      // The seller agrees with the buyer and gives the money back.
+      if (buyer) return { error: 'not_allowed' };
+      if (order.status !== 'disputed') return { error: 'wrong_status' };
+      await refund(admin, order);
+      return { ok: true };
     }
     case 'cancel': {
       if (order.status !== 'paid') return { error: 'wrong_status' };

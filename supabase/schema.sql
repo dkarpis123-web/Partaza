@@ -1114,3 +1114,47 @@ grant execute on function public.seller_away(uuid) to anon, authenticated;
 drop policy if exists listings_read on public.listings;
 create policy listings_read on public.listings for select
   using ((status = 'active' and not public.seller_away(seller_id)) or seller_id = (select auth.uid()) or public.has_thread_on(id));
+
+-- ---------------------------------------------------------------------------
+-- Disputes: what kind of problem the buyer reported, and both sides' explanations.
+-- ---------------------------------------------------------------------------
+alter table public.payment_orders add column if not exists dispute_kind text
+  check (dispute_kind is null or dispute_kind in ('not_received', 'not_as_described', 'damaged', 'no_fit', 'other'));
+
+create table if not exists public.dispute_messages (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.payment_orders (id) on delete cascade,
+  author_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists dispute_messages_order_idx on public.dispute_messages (order_id, created_at);
+
+alter table public.dispute_messages enable row level security;
+revoke all on public.dispute_messages from anon, authenticated;
+grant select, insert on public.dispute_messages to authenticated;
+
+drop policy if exists dispute_messages_read on public.dispute_messages;
+create policy dispute_messages_read on public.dispute_messages for select to authenticated
+  using (exists (select 1 from public.payment_orders o where o.id = order_id and ((select auth.uid()) in (o.buyer_id, o.seller_id))));
+
+drop policy if exists dispute_messages_write on public.dispute_messages;
+create policy dispute_messages_write on public.dispute_messages for insert to authenticated
+  with check (
+    author_id = (select auth.uid())
+    and exists (select 1 from public.payment_orders o where o.id = order_id and o.status = 'disputed' and ((select auth.uid()) in (o.buyer_id, o.seller_id)))
+  );
+
+-- At most 20 explanations per person per order (a trigger, because a policy cannot count its own table).
+create or replace function public.dispute_message_limit() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if (select count(*) from public.dispute_messages m where m.order_id = new.order_id and m.author_id = new.author_id) >= 20 then
+    raise exception 'too_many_messages';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists dispute_message_limit on public.dispute_messages;
+create trigger dispute_message_limit before insert on public.dispute_messages
+  for each row execute function public.dispute_message_limit();

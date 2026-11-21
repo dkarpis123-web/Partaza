@@ -187,6 +187,24 @@ export interface ShipTo {
 }
 
 /** A purchase paid through the platform. Amounts are in euros. Visible only to its buyer and seller. */
+export type DisputeKind = 'not_received' | 'not_as_described' | 'damaged' | 'no_fit' | 'other';
+
+export const DISPUTE_LABELS: Record<DisputeKind, string> = {
+  not_received: 'Negavau siuntos',
+  not_as_described: 'Dalis neatitinka skelbimo',
+  damaged: 'Dalis sugadinta ar neveikia',
+  no_fit: 'Netinka mano automobiliui',
+  other: 'Kita',
+};
+
+/** One side's explanation in a dispute; both the buyer and the seller see all of them. */
+export interface DisputeMessage {
+  id: string;
+  authorId: string;
+  body: string;
+  createdAt: number;
+}
+
 export interface PaidOrder {
   id: string;
   listingId: string | null;
@@ -202,6 +220,8 @@ export interface PaidOrder {
   shipTo: ShipTo | null;
   tracking: string;
   disputeReason: string;
+  /** What kind of problem the buyer reported. */
+  disputeKind: DisputeKind | null;
   createdAt: number;
   paidAt: number | null;
   shippedAt: number | null;

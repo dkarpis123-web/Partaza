@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
 
+import { DisputeBox, ReportProblem } from '@/components/DisputeBox';
 import { ReviewBox } from '@/components/ReviewBox';
 import { Button, Card, Field, Muted, Notice, Page, Row } from '@/components/ui';
 import { type OrderStep, useStore } from '@/store';
 import { colors, money } from '@/theme';
-import { PAID_ORDER_LABELS, type PaidOrder } from '@/types';
+import { type DisputeKind, PAID_ORDER_LABELS, type PaidOrder } from '@/types';
 import { Text } from '@/components/Text';
 
 function date(value: number | null): string {
@@ -34,7 +34,6 @@ export default function OrderScreen() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [tracking, setTracking] = useState('');
-  const [reason, setReason] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const asked = useRef(false);
   const [now] = useState(() => Date.now());
@@ -63,14 +62,13 @@ export default function OrderScreen() {
   const pickup = order.delivery === 'pickup';
   const payout = Math.round((order.itemAmount + order.shippingAmount) * 100) / 100;
 
-  const run = async (step: OrderStep, text?: string, done?: string) => {
+  const run = async (step: OrderStep, text?: string, done?: string, kind?: DisputeKind) => {
     setBusy(true);
-    const problem = await orderStep(order.id, step, text);
+    const problem = await orderStep(order.id, step, text, kind);
     setBusy(false);
     setError(problem ?? '');
     if (!problem) {
       setNote(done ?? '');
-      setReason(null);
     }
   };
 
@@ -92,7 +90,9 @@ export default function OrderScreen() {
       ? `Patikrinkite dalį. Jei viskas gerai – patvirtinkite, ir pardavėjas gaus pinigus. Jei ne – praneškite apie problemą iki ${date(order.releaseAt)}; vėliau pinigai bus pervesti savaime.`
       : `Pirkėjas dalį gavo ir tikrina. Pinigai jums bus pervesti, kai jis patvirtins, arba savaime ${date(order.releaseAt)}.`,
     completed: buyer ? 'Užsakymas užbaigtas, pinigai pervesti pardavėjui.' : 'Užsakymas užbaigtas. Pinigai pervesti į jūsų „Stripe“ paskyrą ir iš jos išmokami į banko sąskaitą.',
-    disputed: 'Pranešta apie problemą. Pinigai sulaikyti, kol Partaza administratorius išnagrinės situaciją ir susisieks su abiem pusėmis.',
+    disputed: buyer
+      ? 'Pranešėte apie problemą. Pinigai sulaikyti. Pardavėjas gali parašyti savo paaiškinimą arba grąžinti pinigus; jei nesutarsite, sprendimą priims Partaza administratorius.'
+      : 'Pirkėjas pranešė apie problemą. Pinigai sulaikyti. Parašykite savo paaiškinimą žemiau arba grąžinkite pinigus; jei nesutarsite, sprendimą priims Partaza administratorius.',
     refunded: buyer ? 'Pinigai grąžinti į jūsų mokėjimo priemonę. Bankas juos įskaito per 5–10 dienų.' : 'Užsakymas atšauktas, pinigai grąžinti pirkėjui. Skelbimas vėl aktyvus.',
     cancelled: 'Mokėjimas neįvyko, užsakymas atšauktas.',
   };
@@ -130,12 +130,7 @@ export default function OrderScreen() {
         </Card>
       ) : null}
 
-      {order.disputeReason ? (
-        <Card>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>Pirkėjo aprašyta problema</Text>
-          <Text style={{ fontSize: 14, lineHeight: 20, color: colors.ink }}>{order.disputeReason}</Text>
-        </Card>
-      ) : null}
+      {order.disputeReason ? <DisputeBox order={order} buyer={buyer} busy={busy} onStep={(step) => run(step)} /> : null}
 
       {!buyer && order.status === 'paid' ? (
         <Card>
@@ -157,24 +152,7 @@ export default function OrderScreen() {
       {buyer && late ? <Button label="Pardavėjas neišsiuntė – atšaukti ir atgauti pinigus" kind="outline" disabled={busy} onPress={() => run('cancel')} /> : null}
 
       {buyer && ['paid', 'shipped', 'received'].includes(order.status) ? (
-        reason === null ? (
-          <Button label="Pranešti apie problemą" kind="quiet" onPress={() => setReason('')} />
-        ) : (
-          <Card>
-            <Field
-              label="Kas negerai?"
-              hint="Aprašykite: dalis negauta, neatitinka skelbimo, sugadinta ir pan. Pinigai bus sulaikyti, kol situaciją išnagrinės administratorius."
-              value={reason}
-              onChangeText={setReason}
-              multiline
-              style={{ minHeight: 90, textAlignVertical: 'top' }}
-            />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button label="Atšaukti" kind="outline" onPress={() => setReason(null)} style={{ flex: 1 }} />
-              <Button label="Siųsti" kind="dark" disabled={busy} onPress={() => run('dispute', reason)} style={{ flex: 1 }} />
-            </View>
-          </Card>
-        )
+        <ReportProblem order={order} busy={busy} onSend={(kind, text) => run('dispute', text, undefined, kind)} />
       ) : null}
 
       {error ? <Notice tone="warn">{error}</Notice> : null}

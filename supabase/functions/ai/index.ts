@@ -72,53 +72,76 @@ function toolInput(result: Json, name: string): Json {
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const language = (lang: unknown) => (lang === 'en' ? 'English' : 'Lithuanian');
 
+interface Candidate {
+  title: string;
+  fits: string;
+}
+
 /**
- * Looks a part number up on the web and returns the vehicles the part fits ('' only if nothing at all
- * turned up). A part number nearly always leads to its vehicles, so this searches persistently and
- * returns every likely vehicle rather than giving up when the first results are thin.
+ * Looks a part number up on the web: what the part really is and which vehicles it fits.
+ * The number decides, not the look of the part - control units and sensors look alike. Returns up to
+ * three candidates, the best-supported first; when sources disagree each reading is its own candidate,
+ * so the seller chooses instead of the AI guessing. Empty when nothing was found.
  */
-async function fitsByNumber(oem: string, title: string, lang: unknown, hint = ''): Promise<string> {
-  if (oem.replace(/[^A-Za-z0-9]/g, '').length < 5) return '';
+async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''): Promise<Candidate[]> {
+  const compact = oem.replace(/[^A-Za-z0-9]/g, '');
+  if (compact.length < 5) return [];
   try {
     const result = await claude({
       model: SEARCH_MODEL,
-      max_tokens: 3000,
+      max_tokens: 3500,
       tools: [
         { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
         {
-          name: 'report_fitment',
-          description: 'Reports which vehicles the part with this number fits. Call it once, after searching.',
+          name: 'report_part',
+          description: 'Reports what the part with this number is and which vehicles it fits. Call it once, after searching.',
           input_schema: {
             type: 'object',
             properties: {
-              found: { type: 'boolean', description: 'true if you can name at least one vehicle the part fits or very probably fits; false only if nothing at all points to a vehicle.' },
-              fits: { type: 'string', description: 'Makes, models and generations/years, comma-separated, most likely first, up to 8 vehicles and 300 characters, e.g. "BMW 5 (G60) 2023-, BMW i5 (G60)". Include every vehicle the sources name, not only the first.' },
-              certain: { type: 'boolean', description: 'true if catalogues or shops list this exact number for these vehicles; false if the list is your best reading of partial results or of the numbering scheme.' },
+              candidates: {
+                type: 'array',
+                description: 'What the sources say this number is, best-supported first, at most 3. One entry if the sources agree. Empty if no page shows this number.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: `Listing title in ${language(lang)}: the part name as catalogues and sellers of this exact number call it, with side or position if they give it. At most 90 characters.` },
+                    fits: { type: 'string', description: 'Makes, models and generations/years the sources list for this number, comma-separated, most common first, up to 8 vehicles and 300 characters.' },
+                    sources: { type: 'integer', description: 'How many separate pages in the results support this reading.' },
+                  },
+                  required: ['title', 'fits', 'sources'],
+                },
+              },
             },
-            required: ['found', 'fits', 'certain'],
+            required: ['candidates'],
           },
         },
       ],
       messages: [{
         role: 'user',
         content:
-          `Vehicle part number: ${oem}\nPart: ${title || '(unknown)'}${hint ? `\nThe seller or the photos suggest: ${hint}` : ''}\n\n` +
-          `Find which vehicle makes, models and generations this part fits. Search the web for the exact number; if the first search finds little, search again in other ways: ` +
-          `the number without spaces or dashes, with spaces in the manufacturer's usual grouping, together with the part name, together with the likely make, and on parts catalogues, ` +
-          `dismantlers and marketplaces (listings of the same number name the car it came from). Also use what you know of manufacturers' numbering schemes ` +
-          `(for example the model prefix in Volkswagen group numbers or the layout of BMW and Mercedes numbers). ` +
-          `Name every vehicle the sources give, most likely first - several candidates are better than none. ` +
-          `Then call the report_fitment tool exactly once (do not answer in plain text). Write model names as they are commonly written; any words in ${language(lang)}.`,
+          `Vehicle part number as read from the part: ${oem}\nThe same number without spaces: ${compact}\n` +
+          `From the photo the part looks like: ${guess || '(unknown)'} - this is only a guess from its shape and may be wrong.${hint ? `\nOther clues: ${hint}` : ''}\n\n` +
+          `Find out what part this number really is and which vehicles it fits. Search the web for the number both ways - with its spaces ("${oem}") and without ("${compact}") - ` +
+          `and, if results are thin, with the manufacturer's name, on parts catalogues, dismantlers and marketplaces. ` +
+          `Read what the pages that show this exact number call the part. The number decides: if the sources name a different part than the photo guess, the sources are right. ` +
+          `If the sources agree, give one candidate. If they name different parts, give each as its own candidate with how many pages support it - do not pick one by guessing. ` +
+          `Ignore pages about other numbers. Then call the report_part tool exactly once (do not answer in plain text).`,
       }],
     });
-    const found = toolInput(result, 'report_fitment');
-    console.log('ai fitment', oem, result.stop_reason, JSON.stringify(found).slice(0, 300));
-    return found.found === true ? text(found.fits, 300) : '';
+    const found = toolInput(result, 'report_part');
+    console.log('ai number', oem, result.stop_reason, JSON.stringify(found).slice(0, 400));
+    return (Array.isArray(found.candidates) ? found.candidates : [])
+      .filter((c: Json) => text(c?.title, 120))
+      .sort((a: Json, b: Json) => (Number(b.sources) || 0) - (Number(a.sources) || 0))
+      .slice(0, 3)
+      .map((c: Json) => ({ title: text(c.title, 120), fits: text(c.fits, 300) }));
   } catch (error) {
-    console.error('ai: fitment lookup failed', (error as Error).message);
-    return '';
+    console.error('ai: number lookup failed', (error as Error).message);
+    return [];
   }
 }
+
+const sameText = (a: string, b: string) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 async function recognize(body: Json): Promise<Json> {
   const photos = (Array.isArray(body.photos) ? body.photos : [])
@@ -153,12 +176,19 @@ async function recognize(body: Json): Promise<Json> {
     }],
   });
   const found = toolInput(result, 'describe_part');
-  // With a readable part number, the vehicles are looked up by that number rather than guessed from the photo.
-  const byNumber = await fitsByNumber(text(found.oem, 60), text(found.title, 120), body.lang, text(found.fits, 200));
+  // With a readable part number, what the part is and what it fits come from that number, not from how the part looks.
+  const seen = text(found.title, 120);
+  const candidates = await lookupNumber(text(found.oem, 60), seen, body.lang, text(found.fits, 200));
+  const best = candidates[0];
+  // Everything else the seller may choose from: other readings of the number, and what the photo alone suggested.
+  const alternatives: Json[] = candidates.slice(1).map((c) => ({ title: c.title, fits: c.fits, from: 'number' }));
+  if (best && seen && !sameText(seen, best.title)) alternatives.push({ title: seen, fits: text(found.fits, 200), from: 'photo' });
   return {
-    title: text(found.title, 120),
+    title: best?.title || seen,
     oem: text(found.oem, 60),
-    fits: byNumber || text(found.fits, 200),
+    fits: best?.fits || text(found.fits, 200),
+    by_number: !!best,
+    alternatives,
     vehicle_type: VEHICLE_TYPES.includes(found.vehicle_type) ? found.vehicle_type : 'car',
     defects: (Array.isArray(found.defects) ? found.defects : []).map((d: unknown) => text(d, 120)).filter(Boolean).slice(0, 6),
   };
@@ -407,8 +437,12 @@ async function improve(body: Json, admin: any, userId: string): Promise<Json> {
   if (!text(found.title, 120)) return { error: 'ai_error' };
   const notes = (Array.isArray(found.notes) ? found.notes : []).map((n: unknown) => text(n, 240)).filter(Boolean).slice(0, 6);
   // The part number decides the fit: vehicles found for it on the web replace the seller's list.
-  const byNumber = await fitsByNumber(text(found.oem, 60), text(found.title, 120), body.lang, text(found.fits, 200));
+  const candidates = await lookupNumber(text(found.oem, 60), text(found.title, 120), body.lang, text(found.fits, 200));
+  const byNumber = candidates[0]?.fits ?? '';
   if (byNumber) notes.push(body.lang === 'en' ? 'Fitment was chosen by the part number from public sources – please check it.' : 'Tinkamumas parinktas pagal dalies numerį iš viešų šaltinių – patikrinkite.');
+  if (candidates[0] && !sameText(candidates[0].title, text(found.title, 120))) {
+    notes.push(`${body.lang === 'en' ? 'By the part number, sources call this part' : 'Pagal dalies numerį šaltiniai šią dalį vadina'}: ${candidates.map((c) => c.title).join(' / ')}`);
+  }
   return {
     title: text(found.title, 120),
     description: text(found.description, 3000),
