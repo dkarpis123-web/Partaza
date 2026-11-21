@@ -144,7 +144,11 @@ export default function ProfileScreen() {
         </Card>
       ) : null}
 
-      <Button label={openOrders > 0 ? `Užsakymai (${openOrders} vykdomi)` : 'Užsakymai'} kind="outline" onPress={() => router.push('/orders')} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button label={openOrders > 0 ? `${tr('Pirkėjo skydelis')} (${openOrders})` : 'Pirkėjo skydelis'} kind="outline" onPress={() => router.push('/orders?role=buy')} style={{ flex: 1 }} />
+        <Button label="Pardavėjo skydelis" kind="outline" onPress={() => router.push('/orders?role=sell')} style={{ flex: 1 }} />
+      </View>
+      <Muted>Skydeliuose – visi užsakymai: vykdomi, apmokėti, įvykdyti, grąžinimai ir ginčai, taip pat jūsų atsiliepimai.</Muted>
       <Button label="Mano prekyba: pajamos, išlaidos, pelnas" kind="dark" onPress={() => router.push('/dashboard')} />
 
       {stale.length > 0 ? (

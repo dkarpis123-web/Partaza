@@ -59,7 +59,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
           </Text>
           <Text style={{ fontSize: 12, color: colors.muted }}>{CONDITION_LABELS[listing.condition]} · {flagOf(listing.country) ? `${flagOf(listing.country)} ` : ''}{listing.city}, {countryName(listing.country)}</Text>
           <Text style={{ fontSize: 12, color: colors.muted }}>
-            {seller.kind === 'business' ? 'Verslas' : 'Privatus'}{seller.reviews > 0 ? ` · ${seller.rating.toFixed(1).replace('.', ',')}` : ''}
+            {seller.kind === 'business' ? 'Verslas' : 'Privatus'}{seller.reviews > 0 ? ` · ★ ${seller.rating.toFixed(1).replace('.', ',')} (${seller.reviews})` : ` · ${tr('naujas pardavėjas')}`}
           </Text>
           <Text style={{ fontSize: 12, color: colors.muted }}>{deliveryText(listing)}</Text>
           {fitsMine ? <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803D' }}>{`✓ ${tr('Tinka jūsų automobiliui')}`}</Text> : null}
