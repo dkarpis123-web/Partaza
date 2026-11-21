@@ -232,6 +232,8 @@ export interface PaidOrder {
   receivedAt: number | null;
   /** When the money goes to the seller by itself if the buyer does nothing. */
   releaseAt: number | null;
+  /** The parts in this order (one, or several from the same seller sent in one parcel). */
+  items: { listingId: string | null; title: string; amount: number }[];
 }
 
 export const PAID_ORDER_LABELS: Record<PaidOrderStatus, string> = {

@@ -1232,3 +1232,38 @@ revoke execute on function public.listing_bump_guard() from public, anon, authen
 drop trigger if exists listing_bump_guard on public.listings;
 create trigger listing_bump_guard before insert or update on public.listings
   for each row execute function public.listing_bump_guard();
+
+-- ---------------------------------------------------------------------------
+-- 29. Several parts from one seller in one order with one shipping.
+-- Every order lists its parts here (a single part is a list of one). A part can be in only one
+-- unfinished order at a time; when an order is cancelled or refunded, its parts are free again.
+-- ---------------------------------------------------------------------------
+create table if not exists public.payment_order_items (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.payment_orders (id) on delete cascade,
+  listing_id uuid references public.listings (id) on delete set null,
+  title text not null,
+  item_amount integer not null check (item_amount > 0),
+  released boolean not null default false,
+  unique (order_id, listing_id)
+);
+create index if not exists payment_order_items_order on public.payment_order_items (order_id);
+create unique index if not exists payment_order_items_one_open on public.payment_order_items (listing_id) where not released;
+alter table public.payment_order_items enable row level security;
+revoke all on public.payment_order_items from anon, authenticated;
+grant select on public.payment_order_items to authenticated;
+drop policy if exists payment_order_items_read on public.payment_order_items;
+create policy payment_order_items_read on public.payment_order_items for select to authenticated
+  using (exists (select 1 from public.payment_orders o where o.id = order_id and (select auth.uid()) in (o.buyer_id, o.seller_id)));
+
+create or replace function public.payment_order_items_release() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  update public.payment_order_items set released = new.status in ('cancelled', 'refunded') where order_id = new.id;
+  return null;
+end;
+$$;
+revoke execute on function public.payment_order_items_release() from public, anon, authenticated;
+drop trigger if exists payment_order_items_release on public.payment_orders;
+create trigger payment_order_items_release after update of status on public.payment_orders
+  for each row when (old.status is distinct from new.status) execute function public.payment_order_items_release();

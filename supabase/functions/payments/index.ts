@@ -7,6 +7,7 @@
 //
 // One function, three kinds of callers:
 // - the app, as a signed-in user:   { action: 'connect_start' | 'connect_status' | 'checkout' | 'sync_order' | 'order_action', ... }
+//   (checkout: listing_id, extra_ids = up to 9 more listings of the same seller sent in the same parcel, delivery, country)
 //   (order_action: do = ship | received | confirm | dispute | dispute_withdraw | dispute_refund | cancel)
 // - Stripe, as a signed webhook:    header "Stripe-Signature" (needs STRIPE_WEBHOOK_SECRET)
 // - the database timer, no rights:  { action: 'release_due' } – takes no input, only releases what is already due
@@ -169,10 +170,19 @@ function siteFor(req: Request): string {
   return SITE;
 }
 
+/** The parts of an order with their prices in cents. Orders made before multi-part orders have only listing_id. */
+async function orderItems(admin: SupabaseClient, order: Json): Promise<{ listing_id: string; item_amount: number }[]> {
+  const { data } = await admin.from('payment_order_items').select('listing_id, item_amount').eq('order_id', order.id);
+  const items = (data ?? []).filter((row: Json) => isUuid(row.listing_id));
+  if (items.length > 0) return items;
+  return order.listing_id ? [{ listing_id: order.listing_id, item_amount: order.item_amount }] : [];
+}
+
 async function reopenListing(admin: SupabaseClient, order: Json) {
-  if (!order.listing_id) return;
-  await admin.from('listings').update({ status: 'active' }).eq('id', order.listing_id).eq('status', 'sold');
-  await admin.from('listing_finance').update({ sold_price: null, sold_at: null }).eq('listing_id', order.listing_id);
+  for (const item of await orderItems(admin, order)) {
+    await admin.from('listings').update({ status: 'active' }).eq('id', item.listing_id).eq('status', 'sold');
+    await admin.from('listing_finance').update({ sold_price: null, sold_at: null }).eq('listing_id', item.listing_id);
+  }
 }
 
 /** Marks the order paid from a completed Checkout Session. Safe to call more than once. */
@@ -208,11 +218,13 @@ async function markPaid(admin: SupabaseClient, session: Json): Promise<void> {
     .eq('status', 'pending')
     .select()
     .maybeSingle();
-  if (!paid || !paid.listing_id) return;
-  await admin.from('listings').update({ status: 'sold' }).eq('id', paid.listing_id);
-  await admin
-    .from('listing_finance')
-    .upsert({ listing_id: paid.listing_id, seller_id: paid.seller_id, sold_price: paid.item_amount / 100, sold_at: new Date().toISOString() }, { onConflict: 'listing_id' });
+  if (!paid) return;
+  for (const item of await orderItems(admin, paid)) {
+    await admin.from('listings').update({ status: 'sold' }).eq('id', item.listing_id);
+    await admin
+      .from('listing_finance')
+      .upsert({ listing_id: item.listing_id, seller_id: paid.seller_id, sold_price: item.item_amount / 100, sold_at: new Date().toISOString() }, { onConflict: 'listing_id' });
+  }
 }
 
 /** Brings a 'pending' order in line with Stripe: paid, expired, or (optionally) cancelled now. */
@@ -393,25 +405,58 @@ async function connectStart(admin: SupabaseClient, user: Json, site: string, cou
   return { url: link.url, ready: false };
 }
 
+/** The price this buyer pays for one listing: its price, or the latest offer both sides accepted in the buyer's chat. */
+async function agreedPrice(admin: SupabaseClient, userId: string, listing: Json): Promise<number> {
+  let price = Number(listing.price);
+  const { data: thread } = await admin.from('threads').select('id').eq('listing_id', listing.id).eq('buyer_id', userId).maybeSingle();
+  if (thread) {
+    const { data: accepted } = await admin
+      .from('messages')
+      .select('amount')
+      .eq('thread_id', thread.id)
+      .eq('kind', 'offer')
+      .eq('status', 'accepted')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (accepted && accepted.length > 0) price = Math.min(price, Number(accepted[0].amount));
+  }
+  return price;
+}
+
 async function checkout(admin: SupabaseClient, user: Json, body: Json, site: string): Promise<Json> {
   const listingId = body.listing_id;
   const delivery = body.delivery;
   if (!isUuid(listingId) || (delivery !== 'shipping' && delivery !== 'pickup')) return { error: 'bad_request' };
+  // More parts of the same seller in the same parcel: one delivery charge for all of them.
+  const extraIds: string[] = Array.isArray(body.extra_ids) ? [...new Set(body.extra_ids.filter(isUuid) as string[])].filter((id) => id !== listingId) : [];
+  if (extraIds.length > 9) return { error: 'bad_request' };
 
   const { data: listing } = await admin.from('listings').select('*').eq('id', listingId).maybeSingle();
   if (!listing || listing.status !== 'active') return { error: 'listing_not_active' };
   if (listing.seller_id === user.id) return { error: 'own_listing' };
-  if (delivery === 'shipping' && listing.shipping === null) return { error: 'no_shipping' };
-  if (delivery === 'pickup' && !listing.pickup) return { error: 'no_pickup' };
+  let parts: Json[] = [listing];
+  if (extraIds.length > 0) {
+    const { data: extras } = await admin.from('listings').select('*').in('id', extraIds);
+    if (!extras || extras.length !== extraIds.length) return { error: 'listing_not_active' };
+    if (extras.some((l: Json) => l.status !== 'active')) return { error: 'listing_not_active' };
+    if (extras.some((l: Json) => l.seller_id !== listing.seller_id)) return { error: 'bundle_other_seller' };
+    parts = [listing, ...extraIds.map((id) => extras.find((l: Json) => l.id === id))];
+  }
+  if (delivery === 'shipping' && parts.some((l) => l.shipping === null)) return { error: parts.length > 1 ? 'bundle_no_shipping' : 'no_shipping' };
+  if (delivery === 'pickup' && parts.some((l) => !l.pickup)) return { error: parts.length > 1 ? 'bundle_no_pickup' : 'no_pickup' };
   // Delivery is charged for one named country: the seller's own price at home, the seller's price
   // for abroad elsewhere. Without a price for that country there is nothing to charge - the buyer asks first.
+  // Several parts go in one parcel, so the highest of their delivery prices is charged once.
   const home = String(listing.country ?? 'LT').toUpperCase();
   const shipCountry = delivery === 'shipping' ? (typeof body.country === 'string' ? body.country.toUpperCase() : home) : null;
-  let rate: unknown = null;
+  let rate = 0;
   if (shipCountry) {
     if (!/^[A-Z]{2}$/.test(shipCountry) || (shipCountry !== home && !EU.includes(shipCountry))) return { error: 'no_shipping_abroad' };
-    rate = shipCountry === home ? listing.shipping : listing.shipping_abroad;
-    if (rate === null || rate === undefined) return { error: 'no_shipping_abroad' };
+    for (const part of parts) {
+      const partRate = shipCountry === String(part.country ?? 'LT').toUpperCase() ? part.shipping : part.shipping_abroad;
+      if (partRate === null || partRate === undefined) return { error: 'no_shipping_abroad' };
+      rate = Math.max(rate, Number(partRate));
+    }
   }
 
   const { data: blocks } = await admin
@@ -424,48 +469,50 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   const { data: account } = await admin.from('seller_accounts').select('payouts_ready').eq('seller_id', listing.seller_id).maybeSingle();
   if (!account?.payouts_ready) return { error: 'seller_not_ready' };
 
-  // The price is decided here, never taken from the app: the listing price, or the latest
-  // offer both sides accepted in this buyer's chat about this listing.
-  let price = Number(listing.price);
-  const { data: thread } = await admin.from('threads').select('id').eq('listing_id', listingId).eq('buyer_id', user.id).maybeSingle();
-  if (thread) {
-    const { data: accepted } = await admin
-      .from('messages')
-      .select('amount')
-      .eq('thread_id', thread.id)
-      .eq('kind', 'offer')
-      .eq('status', 'accepted')
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (accepted && accepted.length > 0) price = Math.min(price, Number(accepted[0].amount));
-  }
-  const item = Math.round(price * 100);
-  const shipping = shipCountry ? Math.round(Number(rate) * 100) : 0;
+  // Prices are decided here, never taken from the app.
+  const items: { listing: Json; cents: number }[] = [];
+  for (const part of parts) items.push({ listing: part, cents: Math.round((await agreedPrice(admin, user.id, part)) * 100) });
+  const item = items.reduce((sum, i) => sum + i.cents, 0);
+  const shipping = shipCountry ? Math.round(rate * 100) : 0;
   const protection = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round(((item + shipping) * FEE_PERCENT) / 100) + FEE_FIXED : 0;
   const fee = protection + ADMIN_FEE;
   const total = item + shipping + fee;
   if (total < 50) return { error: 'amount_too_small' };
 
-  // Clear earlier unfinished attempts: the buyer's own are cancelled, other people's only if stale.
-  const { data: pending } = await admin.from('payment_orders').select('*').eq('listing_id', listingId).eq('status', 'pending');
-  for (const old of pending ?? []) {
+  // Clear earlier unfinished attempts on any of these parts: the buyer's own are cancelled, other people's only if stale.
+  const partIds = parts.map((l) => l.id);
+  const { data: holding } = await admin.from('payment_order_items').select('order_id').in('listing_id', partIds).eq('released', false);
+  const holdingIds = [...new Set((holding ?? []).map((row: Json) => row.order_id))];
+  const { data: pendingByMain } = await admin.from('payment_orders').select('*').in('listing_id', partIds).eq('status', 'pending');
+  const { data: pendingByItem } = holdingIds.length > 0 ? await admin.from('payment_orders').select('*').in('id', holdingIds).eq('status', 'pending') : { data: [] };
+  const pending = [...(pendingByMain ?? []), ...(pendingByItem ?? [])].filter((o, i, all) => all.findIndex((x) => x.id === o.id) === i);
+  for (const old of pending) {
     const own = old.buyer_id === user.id;
     const stale = Date.now() - new Date(old.created_at).getTime() > 32 * 60_000;
     if (own || stale) await settlePending(admin, old, own).catch(() => {});
   }
 
+  const title = parts.length > 1 ? `${String(listing.title).slice(0, 150)} + ${parts.length - 1} ${parts.length - 1 === 1 ? 'dalis' : 'dalys'}` : listing.title;
   const { data: order, error } = await admin
     .from('payment_orders')
     .insert({
-      listing_id: listingId, buyer_id: user.id, seller_id: listing.seller_id, title: listing.title,
+      listing_id: listingId, buyer_id: user.id, seller_id: listing.seller_id, title,
       item_amount: item, shipping_amount: shipping, fee_amount: fee, total_amount: total, delivery, ship_country: shipCountry,
     })
     .select()
     .single();
   if (error || !order) return { error: error?.code === '23505' ? 'listing_reserved' : 'server_error' };
+  // Every part is held for this order; if any is already held by someone else's unfinished order, nothing is bought.
+  const { error: itemsError } = await admin
+    .from('payment_order_items')
+    .insert(items.map((i) => ({ order_id: order.id, listing_id: i.listing.id, title: String(i.listing.title).slice(0, 200), item_amount: i.cents })));
+  if (itemsError) {
+    await admin.from('payment_orders').delete().eq('id', order.id);
+    return { error: itemsError.code === '23505' ? 'listing_reserved' : 'server_error' };
+  }
 
-  const lines: Json[] = [{ quantity: 1, price_data: { currency: 'eur', unit_amount: item, product_data: { name: String(listing.title).slice(0, 120) } } }];
-  if (shipping > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: shipping, product_data: { name: 'Pristatymas' } } });
+  const lines: Json[] = items.map((i) => ({ quantity: 1, price_data: { currency: 'eur', unit_amount: i.cents, product_data: { name: String(i.listing.title).slice(0, 120) } } }));
+  if (shipping > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: shipping, product_data: { name: parts.length > 1 ? 'Pristatymas (viena siunta)' : 'Pristatymas' } } });
   if (protection > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: protection, product_data: { name: 'Pirkėjo apsauga' } } });
   if (ADMIN_FEE > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: ADMIN_FEE, product_data: { name: 'Administravimo mokestis' } } });
 
@@ -480,7 +527,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
         client_reference_id: order.id,
         customer_email: user.email,
         metadata: { order_id: order.id },
-        payment_intent_data: { transfer_group: order.id, metadata: { order_id: order.id }, description: `Partaza: ${String(listing.title).slice(0, 100)}` },
+        payment_intent_data: { transfer_group: order.id, metadata: { order_id: order.id }, description: `Partaza: ${String(title).slice(0, 100)}` },
         phone_number_collection: { enabled: true },
         ...(delivery === 'shipping' ? { shipping_address_collection: { allowed_countries: [shipCountry] } } : {}),
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,

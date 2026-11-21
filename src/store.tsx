@@ -132,7 +132,8 @@ interface Store extends State {
   answerOffer: (threadId: string, messageId: string, status: 'accepted' | 'declined') => Result;
   report: (listingId: string) => Result;
   /** Starts a payment; resolves to the address of the payment page. */
-  buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string) => Promise<{ url?: string; error?: string }>;
+  /** extraIds: more listings of the same seller sent in the same parcel, with one delivery charge. */
+  buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string, extraIds?: string[]) => Promise<{ url?: string; error?: string }>;
   /** Opens the payment for promoting the seller's own listing (5 % of its price, 7 days). */
   bumpStart: (listingId: string) => Promise<{ url?: string; error?: string }>;
   /** Checks with the server whether a promotion payment went through, then reloads the listings. */
@@ -269,6 +270,7 @@ function toPaidOrder(row: Row): PaidOrder {
     delivery: row.delivery === 'pickup' ? 'pickup' : 'shipping', status: row.status, shipTo: row.ship_to ?? null,
     tracking: row.tracking ?? '', disputeReason: row.dispute_reason ?? '', disputeKind: row.dispute_kind ?? null, createdAt: new Date(row.created_at).getTime(),
     paidAt: time(row.paid_at), shippedAt: time(row.shipped_at), receivedAt: time(row.received_at), releaseAt: time(row.release_at),
+    items: (Array.isArray(row.payment_order_items) ? row.payment_order_items : []).map((i: Row) => ({ listingId: i.listing_id ?? null, title: String(i.title ?? ''), amount: Number(i.item_amount) / 100 })),
   };
 }
 
@@ -303,6 +305,9 @@ const PAY_ERRORS: Record<string, string> = {
   connect_not_enabled: 'Išmokos pardavėjams dar neįjungtos. Bandykite vėliau.',
   listing_not_active: 'Skelbimas nebeaktyvus – gali būti, kad dalis ką tik parduota.',
   listing_reserved: 'Šią dalį šiuo metu apmoka kitas pirkėjas. Pabandykite po pusvalandžio.',
+  bundle_other_seller: 'Vienu siuntimu galima pirkti tik to paties pardavėjo dalis.',
+  bundle_no_shipping: 'Ne visas pasirinktas dalis pardavėjas siunčia. Pašalinkite jas arba rinkitės atsiėmimą.',
+  bundle_no_pickup: 'Ne visas pasirinktas dalis galima atsiimti. Pašalinkite jas arba rinkitės pristatymą.',
   own_listing: 'Savo skelbimo pirkti negalima.',
   no_shipping: 'Pardavėjas šios dalies nesiunčia – galimas tik atsiėmimas.',
   no_shipping_abroad: 'Pardavėjas nenurodė siuntimo kainos į šią šalį. Paklauskite jo siuntimo kainos žinute.',
@@ -457,7 +462,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Payments: who can be paid through the platform (public), and my own orders.
     const [readyRes, paidRes] = await Promise.all([
       supabase.from('seller_accounts').select('seller_id').eq('payouts_ready', true),
-      uid ? supabase.from('payment_orders').select('*').neq('status', 'cancelled').order('created_at', { ascending: false }) : Promise.resolve({ data: [] as Row[] }),
+      uid ? supabase.from('payment_orders').select('*, payment_order_items(listing_id, title, item_amount)').neq('status', 'cancelled').order('created_at', { ascending: false }) : Promise.resolve({ data: [] as Row[] }),
     ]);
     const payReady = (readyRes.data ?? []).map((r: Row) => r.seller_id as string);
     const paidOrders = ((paidRes as { data: Row[] | null }).data ?? []).map(toPaidOrder);
@@ -1199,8 +1204,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const buy: Store['buy'] = async (listingId, delivery, country) => {
-      const answer = await pay({ action: 'checkout', listing_id: listingId, delivery, ...(country ? { country } : {}) });
+    const buy: Store['buy'] = async (listingId, delivery, country, extraIds) => {
+      const answer = await pay({ action: 'checkout', listing_id: listingId, delivery, ...(country ? { country } : {}), ...(extraIds && extraIds.length > 0 ? { extra_ids: extraIds } : {}) });
       if (answer.error) return { error: answer.error };
       return answer.data?.url ? { url: String(answer.data.url) } : { error: PAY_ERRORS.stripe_error };
     };

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DisputeBox, ReportProblem } from '@/components/DisputeBox';
 import { ReviewBox } from '@/components/ReviewBox';
 import { Button, Card, Field, Muted, Notice, Page, Row } from '@/components/ui';
+import { tr } from '@/i18n';
 import { type OrderStep, useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { type DisputeKind, PAID_ORDER_LABELS, type PaidOrder } from '@/types';
@@ -103,6 +104,7 @@ export default function OrderScreen() {
   return (
     <Page>
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{order.title}</Text>
+      {order.items.length > 1 ? <Muted>{`${tr('Vienoje siuntoje')}: ${order.items.length} ${tr('dalys')}`}</Muted> : null}
       <Muted>{buyer ? 'Pardavėjas' : 'Pirkėjas'}: {other.name}</Muted>
       <Notice tone={order.status === 'disputed' || order.status === 'cancelled' ? 'warn' : 'ok'}>
         {PAID_ORDER_LABELS[order.status]}. {explain[order.status]}
@@ -110,7 +112,9 @@ export default function OrderScreen() {
       {note ? <Notice>{note}</Notice> : null}
 
       <Card style={{ gap: 0 }}>
-        <Row label="Dalis" value={money(order.itemAmount)} />
+        {order.items.length > 1
+          ? order.items.map((item, index) => <Row key={`${item.listingId ?? index}`} label={item.title} value={money(item.amount)} />)
+          : <Row label="Dalis" value={money(order.itemAmount)} />}
         <Row label={pickup ? 'Atsiėmimas' : 'Pristatymas'} value={pickup ? 'nemokamai' : money(order.shippingAmount)} />
         {order.feeAmount > 0 ? <Row label="Pirkėjo apsauga ir administravimas" value={money(order.feeAmount)} /> : null}
         <Row label={buyer ? 'Sumokėta' : 'Pirkėjas sumokėjo'} value={money(order.total)} />
