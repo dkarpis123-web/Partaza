@@ -1,0 +1,25 @@
+# Search engines may index the public pages.
+User-agent: *
+Allow: /
+Disallow: /orders
+Disallow: /payment/
+Disallow: /buy/
+Disallow: /chat/
+Disallow: /dashboard
+Disallow: /payouts
+
+# Collecting listings, photos or data for AI training or resale is not allowed (see /terms, section 8).
+User-agent: GPTBot
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: Google-Extended
+Disallow: /
+User-agent: anthropic-ai
+Disallow: /
+User-agent: ClaudeBot
+Disallow: /
+User-agent: Bytespider
+Disallow: /
+User-agent: PerplexityBot
+Disallow: /
