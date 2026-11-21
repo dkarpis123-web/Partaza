@@ -1,5 +1,7 @@
 // Partaza AI helpers for sellers, run on Claude:
-//   { action: 'recognize', photos: [public photo URLs], lang }       → title, part number, fit, vehicle type, visible damage
+//   { action: 'recognize', photos: [public photo URLs], codes: [barcodes / QR codes read on the device], lang }
+//                                                                  → title, part number, fit, vehicle type, visible damage; the part is named by its number,
+//                                                                    failing that by a barcode / QR code, failing that by its look - and the look is always checked
 //   { action: 'match', photo: public photo URL, lang }               → which listings on the marketplace show the same kind of part
 //   { action: 'improve', listing_id, lang }                        → corrected title, description, part number and fit for the caller's own listing
 //   { action: 'shipping', title, oem, fits, from, to, lang }       → rough parcel weight/size and a postage estimate between two countries, with sources
@@ -105,7 +107,7 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
                   type: 'object',
                   properties: {
                     title: { type: 'string', description: `Listing title in ${language(lang)}: the part name as catalogues and sellers of this exact number call it, with side or position if they give it. At most 90 characters.` },
-                    fits: { type: 'string', description: 'Makes, models and generations/years the sources list for this number, comma-separated, most common first, up to 8 vehicles and 300 characters.' },
+                    fits: { type: 'string', description: 'Vehicles the sources list for this number, comma-separated, most common first, up to 8 vehicles and 300 characters. Each as make, model, generation code and its production years, e.g. "Mercedes-Benz ML (W166) 2011-2015, Mercedes-Benz GLE (W166) 2015-2018". Always give the year range: from the sources, or the known production years of that generation. Never leave a vehicle without years and never invent a range.' },
                     sources: { type: 'integer', description: 'How many separate pages in the results support this reading.' },
                   },
                   required: ['title', 'fits', 'sources'],
@@ -121,7 +123,7 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
         content:
           `Vehicle part number as read from the part: ${oem}\nThe same number without spaces: ${compact}\n` +
           `From the photo the part looks like: ${guess || '(unknown)'} - this is only a guess from its shape and may be wrong.${hint ? `\nOther clues: ${hint}` : ''}\n\n` +
-          `Find out what part this number really is and which vehicles it fits. Search the web for the number both ways - with its spaces ("${oem}") and without ("${compact}") - ` +
+          `Find out what part this number really is and which vehicles (with production years) it fits. Search the web for the number both ways - with its spaces ("${oem}") and without ("${compact}") - ` +
           `and, if results are thin, with the manufacturer's name, on parts catalogues, dismantlers and marketplaces. ` +
           `Read what the pages that show this exact number call the part. The number decides: if the sources name a different part than the photo guess, the sources are right. ` +
           `If the sources agree, give one candidate. If they name different parts, give each as its own candidate with how many pages support it - do not pick one by guessing. ` +
@@ -143,6 +145,53 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
 
 const sameText = (a: string, b: string) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
+/**
+ * Does the part in the photos look like what its number says it is? Judged by shape, connectors and
+ * mounting only - a label can be moved onto another part. One verdict per candidate title.
+ */
+async function looksRight(photos: string[], titles: string[], lang: unknown): Promise<{ verdicts: ('match' | 'mismatch' | 'unsure')[]; note: string }> {
+  try {
+    const result = await claude({
+      model: VISION_MODEL,
+      max_tokens: 800,
+      tools: [{
+        name: 'report_look',
+        description: 'Records whether the photographed part looks like each named part.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            verdicts: { type: 'array', items: { type: 'string', enum: ['match', 'mismatch', 'unsure'] }, description: 'One per name, in the same order.' },
+            note: { type: 'string', description: `If the first name is not a clear match: one sentence in ${language(lang)} saying what the part looks like instead, or what cannot be told from the photos.` },
+          },
+          required: ['verdicts', 'note'],
+        },
+      }],
+      messages: [{
+        role: 'user',
+        content: [
+          ...photos.slice(0, 3).map((url) => ({ type: 'image', source: { type: 'url', url } })),
+          {
+            type: 'text',
+            text:
+              `According to the number on its label, the part in these photos is one of:\n${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n` +
+              `Ignore the label and every number on it - a label can be stuck onto a different part. Look only at the shape, size, housing, connectors and mounting points. ` +
+              `For each name say whether the part could be that: "match" if its look is consistent with it, "mismatch" if it plainly is a different kind of part ` +
+              `(for example a headlight labelled as a control unit), "unsure" if the photos do not show enough. Electronic modules of different functions often look alike - that is a match, not a mismatch. ` +
+              `Answer by calling the report_look tool exactly once (do not answer in plain text).`,
+          },
+        ],
+      }],
+    });
+    const found = toolInput(result, 'report_look');
+    const verdicts = (Array.isArray(found.verdicts) ? found.verdicts : []).map((v: unknown) => (v === 'match' || v === 'mismatch' ? v : 'unsure'));
+    console.log('ai look', titles[0], JSON.stringify(found).slice(0, 200));
+    return { verdicts, note: text(found.note, 240) };
+  } catch (error) {
+    console.error('ai: look check failed', (error as Error).message);
+    return { verdicts: [], note: '' };
+  }
+}
+
 async function recognize(body: Json): Promise<Json> {
   const photos = (Array.isArray(body.photos) ? body.photos : [])
     .filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u))
@@ -163,8 +212,10 @@ async function recognize(body: Json): Promise<Json> {
           fits: { type: 'string', description: 'Vehicles the part fits: any make or model visible on the part, its label or packaging, or that follows from the part number and the manufacturer\'s numbering scheme. Several candidates are fine. Empty only if nothing points to a vehicle.' },
           vehicle_type: { type: 'string', enum: VEHICLE_TYPES },
           defects: { type: 'array', items: { type: 'string' }, description: 'Visible damage or wear, one short phrase each. Empty if none is visible.' },
+          codes: { type: 'array', items: { type: 'string' }, description: 'Other numbers readable on the part or its labels, especially the digits printed under a barcode or next to a QR code (supplier numbers, serial numbers). Exactly as written. Empty if none.' },
+          looks_like: { type: 'string', description: 'What the part is judging ONLY by its shape, size, connectors and mounting points, as if it had no label at all. A short phrase.' },
         },
-        required: ['title', 'oem', 'fits', 'vehicle_type', 'defects'],
+        required: ['title', 'oem', 'fits', 'vehicle_type', 'defects', 'codes', 'looks_like'],
       },
     }],
     messages: [{
@@ -176,18 +227,40 @@ async function recognize(body: Json): Promise<Json> {
     }],
   });
   const found = toolInput(result, 'describe_part');
-  // With a readable part number, what the part is and what it fits come from that number, not from how the part looks.
+  // Order of trust: the part number first, then barcodes / QR codes, then the look of the part.
   const seen = text(found.title, 120);
-  const candidates = await lookupNumber(text(found.oem, 60), seen, body.lang, text(found.fits, 200));
+  const number = text(found.oem, 60);
+  let source: 'number' | 'code' | 'photo' = 'photo';
+  let candidates = await lookupNumber(number, seen, body.lang, text(found.fits, 200));
+  if (candidates.length > 0) source = 'number';
+  else {
+    // Codes read by the phone from barcodes and QR codes, then other numbers printed on the labels.
+    const scanned = (Array.isArray(body.codes) ? body.codes : []).map((c: unknown) => text(c, 120));
+    const printed = (Array.isArray(found.codes) ? found.codes : []).map((c: unknown) => text(c, 60));
+    const tries = [...scanned, ...printed].filter((c, i, all) => c && c !== number && all.indexOf(c) === i).slice(0, 2);
+    for (const code of tries) {
+      candidates = await lookupNumber(code, seen, body.lang, text(found.fits, 200));
+      if (candidates.length > 0) {
+        source = 'code';
+        break;
+      }
+    }
+  }
   const best = candidates[0];
+  // The look of the part is checked every time: a label can be swapped onto another part.
+  const check = best ? await looksRight(photos, candidates.map((c) => c.title), body.lang) : { verdicts: [], note: '' };
+  const appearance = best ? check.verdicts[0] ?? 'unsure' : 'unsure';
   // Everything else the seller may choose from: other readings of the number, and what the photo alone suggested.
-  const alternatives: Json[] = candidates.slice(1).map((c) => ({ title: c.title, fits: c.fits, from: 'number' }));
+  const alternatives: Json[] = candidates.slice(1).map((c) => ({ title: c.title, fits: c.fits, from: source }));
   if (best && seen && !sameText(seen, best.title)) alternatives.push({ title: seen, fits: text(found.fits, 200), from: 'photo' });
   return {
     title: best?.title || seen,
-    oem: text(found.oem, 60),
+    oem: number,
     fits: best?.fits || text(found.fits, 200),
     by_number: !!best,
+    source,
+    appearance,
+    appearance_note: appearance === 'match' ? '' : check.note,
     alternatives,
     vehicle_type: VEHICLE_TYPES.includes(found.vehicle_type) ? found.vehicle_type : 'car',
     defects: (Array.isArray(found.defects) ? found.defects : []).map((d: unknown) => text(d, 120)).filter(Boolean).slice(0, 6),

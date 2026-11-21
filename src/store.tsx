@@ -1,3 +1,4 @@
+import { scanCodes } from '@/services/codes';
 import { remapMarks } from '@/components/MarkedPhoto';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -94,6 +95,8 @@ interface Store extends State {
   aiShipping: (part: { title: string; oem: string; fits: string; from: string; to: string }) => Promise<{ estimate?: ShippingEstimate; error?: string }>;
   /** Asks the server to check a listing that is waiting; resolves when its status is known. */
   checkListing: (listingId: string) => Promise<void>;
+  /** Records what the AI proposed and what the seller published, so wrong guesses can be found and fixed. Never fails the caller. */
+  aiFeedback: (entry: { listingId: string; oem: string; source: string; appearance: string; aiTitle: string; aiFits: string; finalTitle: string; finalFits: string; picked: string }) => void;
   aiPrices: (part: { title: string; oem: string; fits: string; condition: string; defects: boolean; country: string }) => Promise<{ prices?: WebPrices; error?: string }>;
   /** Follows or unfollows a seller. */
   toggleFollow: (sellerId: string) => Result;
@@ -742,13 +745,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     const aiRecognize: Store['aiRecognize'] = async (photos) => {
       const { me } = stateRef.current;
-      const uploaded = await uploadPhotos(photos, me.id);
+      // Barcodes and QR codes are read on the device, from the original photos, before they are shrunk for upload.
+      const [uploaded, codes] = await Promise.all([uploadPhotos(photos, me.id), scanCodes(photos)]);
       if (!uploaded.urls) return { photos, error: uploaded.error };
-      const { data, error } = await askAi({ action: 'recognize', photos: uploaded.urls });
+      const { data, error } = await askAi({ action: 'recognize', photos: uploaded.urls, codes });
       if (!data) return { photos: uploaded.urls, error };
       return {
         photos: uploaded.urls,
-        result: { title: data.title ?? '', oem: data.oem ?? '', fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
+        result: { title: data.title ?? '', oem: data.oem ?? '', fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, source: data.source ?? 'photo', appearance: data.appearance ?? 'unsure', appearanceNote: data.appearance_note ?? '', byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
       };
     };
 
@@ -780,6 +784,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Stays "being checked"; the server retries on its own every few minutes.
       }
+    };
+
+    const aiFeedback: Store['aiFeedback'] = (entry) => {
+      if (!supabase) return;
+      supabase
+        .from('ai_feedback')
+        .insert({ listing_id: entry.listingId, oem: entry.oem, source: entry.source, appearance: entry.appearance, ai_title: entry.aiTitle, ai_fits: entry.aiFits, final_title: entry.finalTitle, final_fits: entry.finalFits, picked: entry.picked })
+        .then(() => {}, () => {});
     };
 
     const aiShipping: Store['aiShipping'] = async (part) => {
@@ -1212,7 +1224,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

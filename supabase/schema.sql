@@ -1158,3 +1158,29 @@ $$;
 drop trigger if exists dispute_message_limit on public.dispute_messages;
 create trigger dispute_message_limit before insert on public.dispute_messages
   for each row execute function public.dispute_message_limit();
+
+-- ---------------------------------------------------------------------------
+-- AI feedback: what the AI proposed for a listing and what the seller finally published.
+-- Written by the app, read only by the owner in the database - used to find wrong guesses
+-- and improve the AI's instructions.
+-- ---------------------------------------------------------------------------
+create table if not exists public.ai_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  listing_id uuid references public.listings (id) on delete set null,
+  oem text,
+  source text,
+  appearance text,
+  ai_title text,
+  ai_fits text,
+  final_title text,
+  final_fits text,
+  picked text,
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_feedback_created_idx on public.ai_feedback (created_at desc);
+alter table public.ai_feedback enable row level security;
+revoke all on public.ai_feedback from anon, authenticated;
+grant insert on public.ai_feedback to authenticated;
+drop policy if exists ai_feedback_write on public.ai_feedback;
+create policy ai_feedback_write on public.ai_feedback for insert to authenticated with check (user_id = (select auth.uid()));

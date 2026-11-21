@@ -41,6 +41,13 @@
         {
           "locationWhenInUsePermission": "Partaza naudoja jūsų vietą, kad rodytų dalis jūsų šalyje ir mieste."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Partaza naudoja kamerą dalies nuotraukoms ir kodams nuskaityti.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "scheme": "partaza"

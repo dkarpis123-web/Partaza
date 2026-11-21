@@ -20,7 +20,12 @@ export interface Recognition {
   /** true when the title and fit come from looking the part number up, not from the look of the part. */
   byNumber?: boolean;
   /** Other readings the seller can choose instead: other results for the number, or what the photo alone suggested. */
-  alternatives?: { title: string; fits: string; from: 'number' | 'photo' }[];
+  alternatives?: { title: string; fits: string; from: 'number' | 'code' | 'photo' }[];
+  /** Does the part in the photos look like what the number says it is? A swapped label shows up as a mismatch. */
+  appearance?: 'match' | 'mismatch' | 'unsure';
+  appearanceNote?: string;
+  /** Where the title came from: the part number, a barcode / QR code, or the look of the part. */
+  source?: 'number' | 'code' | 'photo';
   /** true while no real model is connected and the fields are sample values. */
   isDemo: boolean;
 }

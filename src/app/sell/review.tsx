@@ -56,7 +56,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   useLang();
   const router = useRouter();
   const params = useLocalSearchParams<{ photos?: string; marks?: string; donor?: string; whole?: string }>();
-  const { listings, donors, registered, phone, addListing, updateListing, live, ready, aiRecognize, aiPrices, vatCode } = useStore();
+  const { listings, donors, registered, phone, addListing, updateListing, live, ready, aiRecognize, aiFeedback, aiPrices, vatCode } = useStore();
   const whole = editing ? !!editing.wholeVehicle : params.whole === '1';
   const donor = donors.find((d) => d.id === (editing ? editing.donorId : params.donor));
 
@@ -142,11 +142,16 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (proposal.fits) setFits(proposal.fits);
     setVehicleType(proposal.vehicleType);
     if (proposal.suggestedDefects.length > 0) setDefects(proposal.suggestedDefects);
-    setChoices(proposal.byNumber || (proposal.alternatives?.length ?? 0) > 0 ? [{ title: proposal.title, fits: proposal.fits, from: proposal.byNumber ? 'number' : 'photo' }, ...(proposal.alternatives ?? [])] : []);
+    setChoices(proposal.byNumber || (proposal.alternatives?.length ?? 0) > 0 ? [{ title: proposal.title, fits: proposal.fits, from: proposal.source ?? (proposal.byNumber ? 'number' : 'photo') }, ...(proposal.alternatives ?? [])] : []);
+      setLook(proposal.byNumber ? { verdict: proposal.appearance ?? 'unsure', note: proposal.appearanceNote ?? '' } : null);
+      setAiFirst({ title: proposal.title, fits: proposal.fits, oem: proposal.oem, source: proposal.source ?? 'photo', appearance: proposal.appearance ?? 'unsure' });
     setProposal(null);
   };
   // What the AI found for this part: the reading in the form first, then the others the seller may pick instead.
-  const [choices, setChoices] = useState<{ title: string; fits: string; from: 'number' | 'photo' }[]>([]);
+  const [choices, setChoices] = useState<{ title: string; fits: string; from: 'number' | 'code' | 'photo' }[]>([]);
+  const [look, setLook] = useState<{ verdict: 'match' | 'mismatch' | 'unsure'; note: string } | null>(null);
+  // What the AI first put into the form; compared with what is published, to learn where it was wrong.
+  const [aiFirst, setAiFirst] = useState<{ title: string; fits: string; oem: string; source: string; appearance: string } | null>(null);
   const [webPrices, setWebPrices] = useState<WebPrices | null>(null);
   const [webBusy, setWebBusy] = useState(false);
   const [webProblem, setWebProblem] = useState('');
@@ -171,7 +176,9 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       setVehicleType(r.vehicleType);
       setDefects(r.suggestedDefects);
       setIsDemo(r.isDemo);
-      setChoices(r.byNumber || (r.alternatives?.length ?? 0) > 0 ? [{ title: r.title, fits: r.fits, from: r.byNumber ? 'number' : 'photo' }, ...(r.alternatives ?? [])] : []);
+      setChoices(r.byNumber || (r.alternatives?.length ?? 0) > 0 ? [{ title: r.title, fits: r.fits, from: r.source ?? (r.byNumber ? 'number' : 'photo') }, ...(r.alternatives ?? [])] : []);
+      setLook(r.byNumber ? { verdict: r.appearance ?? 'unsure', note: r.appearanceNote ?? '' } : null);
+      if (!r.isDemo && r.title) setAiFirst({ title: r.title, fits: r.fits, oem: r.oem, source: r.source ?? 'photo', appearance: r.appearance ?? 'unsure' });
     };
     if (!live) {
       recognizePart(initialPhotos).then((r) => {
@@ -275,6 +282,10 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     });
     setPublishing(false);
     if (!result.id) return setError(result.error ?? 'Nepavyko paskelbti.');
+    if (aiFirst) {
+      const kept = title.trim() === aiFirst.title ? 'ai' : choices.find((c) => c.title === title.trim())?.from ?? 'own';
+      aiFeedback({ listingId: result.id, oem: oem.trim(), source: aiFirst.source, appearance: aiFirst.appearance, aiTitle: aiFirst.title, aiFits: aiFirst.fits, finalTitle: title.trim(), finalFits: fits.trim(), picked: kept });
+    }
     router.replace(`/listing/${result.id}`);
   };
 
@@ -331,6 +342,9 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Card style={{ borderColor: colors.accent, borderWidth: 2 }}>
           <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>{choices.length > 1 ? 'DI rado kelis variantus – pasirinkite teisingą' : 'DI dalį nustatė pagal numerį'}</Text>
           <Muted>{choices.length > 1 ? 'Pavadinimas ir tinkamumas parinkti pagal dalies numerį internete. Jei tai ne ta dalis, pasirinkite kitą variantą arba pataisykite patys.' : 'Pavadinimas ir tinkamumas paimti iš šaltinių, kuriuose rastas šis numeris. Patikrinkite, ar tai ta dalis.'}</Muted>
+          {look?.verdict === 'match' ? <Text style={{ fontSize: 13, fontWeight: '700', color: '#15803D' }}>✓ Dalies išvaizda atitinka tai, ką rodo numeris.</Text> : null}
+          {look?.verdict === 'mismatch' ? <Notice tone="warn">{`${tr('Dalies išvaizda nesutampa su tuo, ką rodo numeris – etiketė gali būti perklijuota. Patikrinkite prieš skelbdami.')} ${look.note}`}</Notice> : null}
+          {look?.verdict === 'unsure' ? <Muted>{`${tr('Iš nuotraukų negalėjome patvirtinti, kad dalis atrodo taip, kaip rodo numeris.')} ${look.note}`}</Muted> : null}
           {choices.map((c) => {
             const picked = title.trim() === c.title;
             return (
@@ -340,7 +354,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
                 accessibilityState={{ selected: picked }}
                 onPress={() => { setTitle(c.title); if (c.fits) setFits(c.fits); }}
                 style={{ padding: 10, borderRadius: 10, borderWidth: picked ? 2 : 1, borderColor: picked ? colors.ink : colors.border, backgroundColor: picked ? colors.accentSoft : colors.surface, gap: 2 }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>{c.from === 'number' ? 'Pagal dalies numerį' : 'Pagal nuotrauką (spėjimas)'}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>{c.from === 'number' ? 'Pagal dalies numerį' : c.from === 'code' ? 'Pagal brūkšninį ar QR kodą' : 'Pagal nuotrauką (spėjimas)'}</Text>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ink }}>{c.title}</Text>
                 {c.fits ? <Text style={{ fontSize: 13, color: colors.muted }}>{c.fits}</Text> : null}
               </Pressable>
@@ -387,10 +401,10 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1 }}>
-            <Field label="Metai nuo (nebūtina)" value={yearFrom} onChangeText={(t) => setYearFrom(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="2015" />
+            <Field label="Metai nuo (nebūtina)" value={yearFrom} onChangeText={(t) => setYearFrom(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="nuo" />
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="Metai iki" value={yearTo} onChangeText={(t) => setYearTo(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="2018" />
+            <Field label="Metai iki" value={yearTo} onChangeText={(t) => setYearTo(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="iki" />
           </View>
         </View>
         {yearsText && fitsList.length > 0 && !lastHasYear ? (
