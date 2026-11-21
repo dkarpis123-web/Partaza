@@ -7,7 +7,8 @@
 //
 // One function, three kinds of callers:
 // - the app, as a signed-in user:   { action: 'connect_start' | 'connect_status' | 'checkout' | 'sync_order' | 'order_action', ... }
-//   (checkout: listing_id, extra_ids = up to 9 more listings of the same seller sent in the same parcel, delivery, country, lang)
+//   (checkout: listing_id, extra_ids = up to 9 more listings of the same seller sent in the same parcel, delivery, country, lang,
+//    tip_cents = an optional voluntary contribution to Partaza, 0-5000, kept by the platform and never sent to the seller)
 //   (order_action: do = ship | received | confirm | dispute | dispute_withdraw | dispute_refund | cancel)
 // - Stripe, as a signed webhook:    header "Stripe-Signature" (needs STRIPE_WEBHOOK_SECRET)
 // - the database timer, no rights:  { action: 'release_due' } – takes no input, only releases what is already due
@@ -47,18 +48,29 @@ const SILENT_DAYS = 14;
 const DISPATCH_DAYS = 7;
 const DISPUTE_KINDS = ['not_received', 'not_as_described', 'damaged', 'no_fit', 'other'];
 /** Words on Stripe's payment page in the buyer's language (Stripe shows its own page in the same language). */
-const WORDS: Record<string, { delivery: string; oneParcel: string; protection: string; admin: string }> = {
-  lt: { delivery: 'Pristatymas', oneParcel: 'Pristatymas (viena siunta)', protection: 'Pirkėjo apsauga', admin: 'Administravimo mokestis' },
-  en: { delivery: 'Delivery', oneParcel: 'Delivery (one parcel)', protection: 'Buyer protection', admin: 'Administration fee' },
-  lv: { delivery: 'Piegāde', oneParcel: 'Piegāde (viens sūtījums)', protection: 'Pircēja aizsardzība', admin: 'Administrēšanas maksa' },
-  et: { delivery: 'Tarne', oneParcel: 'Tarne (üks pakk)', protection: 'Ostjakaitse', admin: 'Haldustasu' },
-  pl: { delivery: 'Dostawa', oneParcel: 'Dostawa (jedna przesyłka)', protection: 'Ochrona kupującego', admin: 'Opłata administracyjna' },
-  ru: { delivery: 'Доставка', oneParcel: 'Доставка (одна посылка)', protection: 'Защита покупателя', admin: 'Административный сбор' },
-  de: { delivery: 'Lieferung', oneParcel: 'Lieferung (ein Paket)', protection: 'Käuferschutz', admin: 'Bearbeitungsgebühr' },
-  es: { delivery: 'Envío', oneParcel: 'Envío (un paquete)', protection: 'Protección al comprador', admin: 'Tarifa de gestión' },
-  fr: { delivery: 'Livraison', oneParcel: 'Livraison (un colis)', protection: 'Protection acheteur', admin: 'Frais de gestion' },
+const WORDS: Record<string, { delivery: string; oneParcel: string; protection: string; admin: string; tip?: string }> = {
+  lt: { delivery: 'Pristatymas', oneParcel: 'Pristatymas (viena siunta)', protection: 'Pirkėjo apsauga', admin: 'Administravimo mokestis', tip: 'Savanoriškas prisidėjimas prie Partaza' },
+  en: { delivery: 'Delivery', oneParcel: 'Delivery (one parcel)', protection: 'Buyer protection', admin: 'Administration fee', tip: 'Voluntary contribution to Partaza' },
+  lv: { delivery: 'Piegāde', oneParcel: 'Piegāde (viens sūtījums)', protection: 'Pircēja aizsardzība', admin: 'Administrēšanas maksa', tip: 'Brīvprātīgs atbalsts Partaza' },
+  et: { delivery: 'Tarne', oneParcel: 'Tarne (üks pakk)', protection: 'Ostjakaitse', admin: 'Haldustasu', tip: 'Vabatahtlik toetus Partazale' },
+  pl: { delivery: 'Dostawa', oneParcel: 'Dostawa (jedna przesyłka)', protection: 'Ochrona kupującego', admin: 'Opłata administracyjna', tip: 'Dobrowolne wsparcie Partaza' },
+  ru: { delivery: 'Доставка', oneParcel: 'Доставка (одна посылка)', protection: 'Защита покупателя', admin: 'Административный сбор', tip: 'Добровольная поддержка Partaza' },
+  de: { delivery: 'Lieferung', oneParcel: 'Lieferung (ein Paket)', protection: 'Käuferschutz', admin: 'Bearbeitungsgebühr', tip: 'Freiwillige Unterstützung für Partaza' },
+  es: { delivery: 'Envío', oneParcel: 'Envío (un paquete)', protection: 'Protección al comprador', admin: 'Tarifa de gestión', tip: 'Aportación voluntaria a Partaza' },
+  fr: { delivery: 'Livraison', oneParcel: 'Livraison (un colis)', protection: 'Protection acheteur', admin: 'Frais de gestion', tip: 'Contribution volontaire à Partaza' },
 };
 const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
+/** Same rules as src/services/shipping.ts: where a seller with each delivery zone sends parts. */
+const EUROPE_NON_EU = ['GB', 'NO', 'CH', 'IS', 'LI', 'UA', 'MD', 'RS', 'ME', 'MK', 'AL', 'BA', 'XK', 'AD', 'MC', 'SM', 'VA', 'GI'];
+const NO_DELIVERY = ['RU', 'BY', 'KP', 'IR', 'SY', 'CU'];
+function zoneAllows(from: string, zone: unknown, to: string): boolean {
+  if (to === from) return true;
+  if (NO_DELIVERY.includes(to)) return false;
+  if (zone === 'home') return false;
+  if (zone === 'europe') return EU.includes(to) || EUROPE_NON_EU.includes(to);
+  if (zone === 'world') return true;
+  return EU.includes(to);
+}
 
 const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
 const WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
@@ -463,8 +475,9 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   const shipCountry = delivery === 'shipping' ? (typeof body.country === 'string' ? body.country.toUpperCase() : home) : null;
   let rate = 0;
   if (shipCountry) {
-    if (!/^[A-Z]{2}$/.test(shipCountry) || (shipCountry !== home && !EU.includes(shipCountry))) return { error: 'no_shipping_abroad' };
+    if (!/^[A-Z]{2}$/.test(shipCountry)) return { error: 'bad_request' };
     for (const part of parts) {
+      if (!zoneAllows(String(part.country ?? 'LT').toUpperCase(), part.ship_zone, shipCountry)) return { error: 'not_shipped_there' };
       const partRate = shipCountry === String(part.country ?? 'LT').toUpperCase() ? part.shipping : part.shipping_abroad;
       if (partRate === null || partRate === undefined) return { error: 'no_shipping_abroad' };
       rate = Math.max(rate, Number(partRate));
@@ -488,7 +501,8 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   const shipping = shipCountry ? Math.round(rate * 100) : 0;
   const protection = FEE_PERCENT > 0 || FEE_FIXED > 0 ? Math.round(((item + shipping) * FEE_PERCENT) / 100) + FEE_FIXED : 0;
   const fee = protection + ADMIN_FEE;
-  const total = item + shipping + fee;
+  const tip = Number.isInteger(body.tip_cents) && body.tip_cents >= 100 && body.tip_cents <= 5000 ? body.tip_cents : 0;
+  const total = item + shipping + fee + tip;
   if (total < 50) return { error: 'amount_too_small' };
 
   // Clear earlier unfinished attempts on any of these parts: the buyer's own are cancelled, other people's only if stale.
@@ -509,7 +523,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
     .from('payment_orders')
     .insert({
       listing_id: listingId, buyer_id: user.id, seller_id: listing.seller_id, title,
-      item_amount: item, shipping_amount: shipping, fee_amount: fee, total_amount: total, delivery, ship_country: shipCountry,
+      item_amount: item, shipping_amount: shipping, fee_amount: fee, tip_amount: tip, total_amount: total, delivery, ship_country: shipCountry,
     })
     .select()
     .single();
@@ -529,6 +543,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
   if (shipping > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: shipping, product_data: { name: parts.length > 1 ? words.oneParcel : words.delivery } } });
   if (protection > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: protection, product_data: { name: words.protection } } });
   if (ADMIN_FEE > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: ADMIN_FEE, product_data: { name: words.admin } } });
+  if (tip > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: tip, product_data: { name: words.tip ?? WORDS.en.tip } } });
 
   try {
     const session = await stripe(

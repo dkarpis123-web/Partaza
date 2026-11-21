@@ -6,10 +6,11 @@ import { Button, Card, Chip, Muted, Notice, Page, Row } from '@/components/ui';
 import { COUNTRIES, CUSTOMS_NOTE, crossesEuBorder, countryLabel, countryName, setDestination, useDestination } from '@/services/geo';
 import { normalize } from '@/services/match';
 import { openExternal } from '@/services/open';
-import { shippingTo } from '@/services/shipping';
+import { shippingTo, shipsTo } from '@/services/shipping';
 import { useStore } from '@/store';
 import { ADMIN_FEE, buyerFee, colors, money, radius } from '@/theme';
 import { Text, TextInput } from '@/components/Text';
+import { TipBox } from '@/components/TipBox';
 import { tr } from '@/i18n';
 
 /** PaidOrder summary before the buyer is sent to the payment page. */
@@ -26,6 +27,7 @@ export default function BuyScreen() {
   const [editCountry, setEditCountry] = useState(false);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
+  const [tipCents, setTipCents] = useState(0);
   // More parts of the same seller in the same parcel.
   const [extraIds, setExtraIds] = useState<string[]>([]);
 
@@ -74,13 +76,13 @@ export default function BuyScreen() {
   // One parcel: the highest delivery price among the chosen parts is charged once.
   const shipping = delivery === 'shipping' ? Math.max(shipPrice ?? 0, ...extras.map((l) => shippingTo(l, shipCountry) ?? 0)) : 0;
   const fee = buyerFee(price + shipping);
-  const total = Math.round((price + shipping + fee + ADMIN_FEE) * 100) / 100;
+  const total = Math.round((price + shipping + fee + ADMIN_FEE + tipCents / 100) * 100) / 100;
   const seller = userById(listing.sellerId);
 
   const start = async () => {
     setBusy(true);
     setError('');
-    const answer = await buy(listing.id, delivery, delivery === 'shipping' ? shipCountry : undefined, extras.map((l) => l.id));
+    const answer = await buy(listing.id, delivery, delivery === 'shipping' ? shipCountry : undefined, extras.map((l) => l.id), tipCents);
     if (answer.url) return openExternal(answer.url);
     setBusy(false);
     setError(answer.error ?? 'Nepavyko pradėti mokėjimo.');
@@ -128,7 +130,9 @@ export default function BuyScreen() {
             </>
           ) : null}
           {crossesEuBorder(listing.country, shipCountry) ? <Muted>{CUSTOMS_NOTE}</Muted> : null}
-          {blocked ? (
+          {blocked && !shipsTo(listing, shipCountry) ? (
+            <Notice tone="warn">{`${tr('Pardavėjas į šią šalį nesiunčia')}: ${countryName(shipCountry)}.`}</Notice>
+          ) : blocked ? (
             <>
               <Notice tone="warn">Pardavėjas nenurodė siuntimo kainos į šią šalį, todėl apmokėti siuntimo dar negalima. Paklauskite kainos – sutarus pardavėjas ją įrašys skelbime.</Notice>
               <Button label="Klausti siuntimo kainos skelbime" kind="outline" onPress={() => router.replace(`/listing/${listing.id}`)} />
@@ -166,7 +170,12 @@ export default function BuyScreen() {
         <Row label={delivery === 'shipping' ? (extras.length > 0 ? 'Pristatymas (viena siunta)' : 'Pristatymas') : 'Atsiėmimas'} value={delivery === 'shipping' ? (blocked ? '–' : money(shipping)) : `${listing.city}, nemokamai`} />
         <Row label="Pirkėjo apsauga" value={money(fee)} />
         <Row label="Administravimo mokestis" value={money(ADMIN_FEE)} />
+        {tipCents > 0 ? <Row label="Prisidėjimas prie Partaza" value={money(tipCents / 100)} /> : null}
         <Row label="Iš viso" value={money(total)} strong />
+      </Card>
+
+      <Card>
+        <TipBox onChange={setTipCents} />
       </Card>
 
       <Notice>

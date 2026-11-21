@@ -3,6 +3,34 @@
 // Anything missing here is shown in English (src/i18n/en.ts).
 
 export const DICT: Record<string, string> = {
+  // Voluntary contribution at payment (2026-11-21)
+  "Noriu savanoriškai prisidėti prie Partaza tobulinimo": "Хочу добровольно поддержать развитие Partaza",
+  "Kita suma": "Другая сумма",
+  "Kita suma, €": "Другая сумма, €",
+  "Suma, € (1–50)": "Сумма, € (1–50)",
+  "Ši suma tenka Partaza, ne pardavėjui. Ją panaudosime programėlei tobulinti. Grąžinant pirkimą, grąžinama ir ši suma.": "Эта сумма поступает Partaza, а не продавцу. Мы потратим её на улучшение приложения. При возврате покупки эта сумма тоже возвращается.",
+  "Prisidėjimas prie Partaza": "Поддержка Partaza",
+  // Where sellers send and where buyers look (2026-11-21)
+  "Siunčiu": "Отправляю",
+  "Tik savo šalyje": "Только в своей стране",
+  "Į Europos Sąjungos šalis": "В страны ЕС",
+  "Į visą Europą (su JK, Norvegija, Šveicarija)": "По всей Европе (вкл. Великобританию, Норвегию, Швейцарию)",
+  "Į visą pasaulį": "По всему миру",
+  "tik savo šalyje": "только в стране продавца",
+  "į ES šalis": "в страны ЕС",
+  "į visą Europą": "по всей Европе",
+  "į visą pasaulį": "по всему миру",
+  "Siunčia": "Отправляет",
+  "Pardavėjas į šią šalį nesiunčia": "Продавец не отправляет в эту страну",
+  "Pardavėjas į šią šalį nesiunčia.": "Продавец не отправляет в эту страну.",
+  "Galite atsiimti vietoje arba paklausti pardavėjo žinute.": "Можно забрать на месте или спросить продавца в сообщении.",
+  "Pasiekia mano šalį": "Доступно в моей стране",
+  "Tik": "Только",
+  "Europos Sąjunga": "Европейский союз",
+  "Visa Europa": "Вся Европа",
+  "Visas pasaulis": "Весь мир",
+  "Visi miestai": "Все города",
+  "Siuntimo kaina į kitas šalis, € (nebūtina)": "Цена доставки в другие страны, € (необязательно)",
   // Listing translation (written by hand, 2026-11-21)
   "Verčiama…": "Переводим…",
   "Rodyti originalą": "Показать оригинал",

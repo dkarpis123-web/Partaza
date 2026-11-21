@@ -1363,3 +1363,10 @@ create trigger report_rate_limit before insert on public.reports for each row ex
 -- 34. Spanish and French translations of listings.
 alter table public.listing_translations drop constraint if exists listing_translations_lang_check;
 alter table public.listing_translations add constraint listing_translations_lang_check check (lang = any (array['lt','en','lv','et','pl','ru','de','es','fr']));
+
+-- 35. Where the seller sends the part: only in their own country, to EU countries, to all of Europe, or worldwide.
+alter table public.listings add column if not exists ship_zone text not null default 'eu' check (ship_zone in ('home', 'eu', 'europe', 'world'));
+create index if not exists listings_country_city_idx on public.listings (country, city) where status = 'active';
+
+-- 36. A voluntary contribution to Partaza the buyer may add at payment (unticked by default). Stays with the platform, never transferred to the seller.
+alter table public.payment_orders add column if not exists tip_amount integer not null default 0 check (tip_amount between 0 and 5000);

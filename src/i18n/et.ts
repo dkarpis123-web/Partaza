@@ -3,6 +3,34 @@
 // Anything missing here is shown in English (src/i18n/en.ts).
 
 export const DICT: Record<string, string> = {
+  // Voluntary contribution at payment (2026-11-21)
+  "Noriu savanoriškai prisidėti prie Partaza tobulinimo": "Soovin vabatahtlikult toetada Partaza arendamist",
+  "Kita suma": "Muu summa",
+  "Kita suma, €": "Muu summa, €",
+  "Suma, € (1–50)": "Summa, € (1–50)",
+  "Ši suma tenka Partaza, ne pardavėjui. Ją panaudosime programėlei tobulinti. Grąžinant pirkimą, grąžinama ir ši suma.": "See summa läheb Partazale, mitte müüjale. Kasutame seda rakenduse parandamiseks. Ostu tagastamisel tagastatakse ka see summa.",
+  "Prisidėjimas prie Partaza": "Toetus Partazale",
+  // Where sellers send and where buyers look (2026-11-21)
+  "Siunčiu": "Saadan",
+  "Tik savo šalyje": "Ainult oma riigis",
+  "Į Europos Sąjungos šalis": "ELi riikidesse",
+  "Į visą Europą (su JK, Norvegija, Šveicarija)": "Kogu Euroopasse (ka ÜK, Norra, Šveits)",
+  "Į visą pasaulį": "Üle maailma",
+  "tik savo šalyje": "ainult müüja riigis",
+  "į ES šalis": "ELi riikidesse",
+  "į visą Europą": "kogu Euroopasse",
+  "į visą pasaulį": "üle maailma",
+  "Siunčia": "Saadab",
+  "Pardavėjas į šią šalį nesiunčia": "Müüja sellesse riiki ei saada",
+  "Pardavėjas į šią šalį nesiunčia.": "Müüja sellesse riiki ei saada.",
+  "Galite atsiimti vietoje arba paklausti pardavėjo žinute.": "Saate selle kohapealt kätte või küsida müüjalt sõnumiga.",
+  "Pasiekia mano šalį": "Jõuab minu riiki",
+  "Tik": "Ainult",
+  "Europos Sąjunga": "Euroopa Liit",
+  "Visa Europa": "Kogu Euroopa",
+  "Visas pasaulis": "Kogu maailm",
+  "Visi miestai": "Kõik linnad",
+  "Siuntimo kaina į kitas šalis, € (nebūtina)": "Saatmise hind teistesse riikidesse, € (valikuline)",
   // Listing translation (written by hand, 2026-11-21)
   "Verčiama…": "Tõlgin…",
   "Rodyti originalą": "Näita originaali",

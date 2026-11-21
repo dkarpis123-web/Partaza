@@ -3,6 +3,34 @@
 // Anything missing here is simply shown in Lithuanian.
 
 export const EN: Record<string, string> = {
+  // Voluntary contribution at payment (2026-11-21)
+  "Noriu savanoriškai prisidėti prie Partaza tobulinimo": "I'd like to make a voluntary contribution to improving Partaza",
+  "Kita suma": "Other amount",
+  "Kita suma, €": "Other amount, €",
+  "Suma, € (1–50)": "Amount, € (1–50)",
+  "Ši suma tenka Partaza, ne pardavėjui. Ją panaudosime programėlei tobulinti. Grąžinant pirkimą, grąžinama ir ši suma.": "This amount goes to Partaza, not to the seller. We will use it to improve the app. If the purchase is refunded, this amount is refunded too.",
+  "Prisidėjimas prie Partaza": "Contribution to Partaza",
+  // Where sellers send and where buyers look (2026-11-21)
+  "Siunčiu": "I send",
+  "Tik savo šalyje": "Only within my country",
+  "Į Europos Sąjungos šalis": "To EU countries",
+  "Į visą Europą (su JK, Norvegija, Šveicarija)": "To all of Europe (incl. UK, Norway, Switzerland)",
+  "Į visą pasaulį": "Worldwide",
+  "tik savo šalyje": "only within the seller's country",
+  "į ES šalis": "to EU countries",
+  "į visą Europą": "to all of Europe",
+  "į visą pasaulį": "worldwide",
+  "Siunčia": "Ships",
+  "Pardavėjas į šią šalį nesiunčia": "The seller does not ship to this country",
+  "Pardavėjas į šią šalį nesiunčia.": "The seller does not ship to this country.",
+  "Galite atsiimti vietoje arba paklausti pardavėjo žinute.": "You can pick it up or ask the seller in a message.",
+  "Pasiekia mano šalį": "Can reach my country",
+  "Tik": "Only",
+  "Europos Sąjunga": "European Union",
+  "Visa Europa": "All of Europe",
+  "Visas pasaulis": "Worldwide",
+  "Visi miestai": "All cities",
+  "Siuntimo kaina į kitas šalis, € (nebūtina)": "Shipping price to other countries, € (optional)",
   // Navigation and headers
   'Skelbimas': 'Listing',
   'Siūlyti kainą': 'Make an offer',

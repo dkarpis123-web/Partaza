@@ -133,7 +133,7 @@ interface Store extends State {
   report: (listingId: string) => Result;
   /** Starts a payment; resolves to the address of the payment page. */
   /** extraIds: more listings of the same seller sent in the same parcel, with one delivery charge. */
-  buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string, extraIds?: string[]) => Promise<{ url?: string; error?: string }>;
+  buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string, extraIds?: string[], tipCents?: number) => Promise<{ url?: string; error?: string }>;
   /** Looks the whole marketplace up for this text or code (the app holds only the newest 300 listings) and adds what it finds. */
   searchServer: (query: string) => Promise<void>;
   /** The listing's own title and description in the language the app is shown in (made once, then kept). */
@@ -237,7 +237,7 @@ function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
     defects: row.defects ?? [], oem: row.oem ?? '', altCodes: row.alt_codes ?? '', bumpedUntil: row.bumped_until ? new Date(row.bumped_until).getTime() : null, fits: row.fits ?? '', vehicleType: row.vehicle_type,
-    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad), photoMarks: row.photo_marks && typeof row.photo_marks === 'object' ? row.photo_marks : {},
+    city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad), shipZone: ['home', 'eu', 'europe', 'world'].includes(row.ship_zone) ? row.ship_zone : 'eu', photoMarks: row.photo_marks && typeof row.photo_marks === 'object' ? row.photo_marks : {},
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : row.status === 'pending' ? 'pending' : row.status === 'rejected' ? 'rejected' : 'active',
     moderationNote: row.moderation_note ?? null,
@@ -273,7 +273,7 @@ function toPaidOrder(row: Row): PaidOrder {
   const time = (value: string | null) => (value ? new Date(value).getTime() : null);
   return {
     id: row.id, listingId: row.listing_id ?? null, buyerId: row.buyer_id ?? '', sellerId: row.seller_id ?? '', title: row.title,
-    itemAmount: row.item_amount / 100, shippingAmount: row.shipping_amount / 100, feeAmount: row.fee_amount / 100, total: row.total_amount / 100,
+    itemAmount: row.item_amount / 100, shippingAmount: row.shipping_amount / 100, feeAmount: row.fee_amount / 100, tipAmount: (row.tip_amount ?? 0) / 100, total: row.total_amount / 100,
     delivery: row.delivery === 'pickup' ? 'pickup' : 'shipping', status: row.status, shipTo: row.ship_to ?? null,
     tracking: row.tracking ?? '', disputeReason: row.dispute_reason ?? '', disputeKind: row.dispute_kind ?? null, createdAt: new Date(row.created_at).getTime(),
     paidAt: time(row.paid_at), shippedAt: time(row.shipped_at), receivedAt: time(row.received_at), releaseAt: time(row.release_at),
@@ -318,6 +318,7 @@ const PAY_ERRORS: Record<string, string> = {
   own_listing: 'Savo skelbimo pirkti negalima.',
   no_shipping: 'Pardavėjas šios dalies nesiunčia – galimas tik atsiėmimas.',
   no_shipping_abroad: 'Pardavėjas nenurodė siuntimo kainos į šią šalį. Paklauskite jo siuntimo kainos žinute.',
+  not_shipped_there: 'Pardavėjas į šią šalį nesiunčia.',
   no_pickup: 'Šios dalies atsiimti negalima – tik pristatymas.',
   user_blocked: 'Pirkti negalite: vienas iš jūsų užblokavo kitą.',
   seller_not_ready: 'Pardavėjas dar nepriima mokėjimų per Partaza. Susitarkite žinutėmis.',
@@ -1024,7 +1025,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
           defects: draft.defects, oem: draft.oem, alt_codes: (draft.altCodes ?? '').slice(0, 300), fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
-          classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
+          classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, ship_zone: draft.shipZone ?? 'eu', whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
           photo_marks: remapMarks(draft.photoMarks, draft.photos, urls),
         })
         .select()
@@ -1056,7 +1057,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .update({
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
             oem: draft.oem, alt_codes: (draft.altCodes ?? '').slice(0, 300), fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
-            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle,
+            pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, ship_zone: draft.shipZone ?? 'eu', whole_vehicle: !!draft.wholeVehicle,
             description: draft.description ?? '', photo_marks: remapMarks(draft.photoMarks, draft.photos, urls),
           })
           .eq('id', listingId);
@@ -1253,8 +1254,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const buy: Store['buy'] = async (listingId, delivery, country, extraIds) => {
-      const answer = await pay({ action: 'checkout', lang: getLang(), listing_id: listingId, delivery, ...(country ? { country } : {}), ...(extraIds && extraIds.length > 0 ? { extra_ids: extraIds } : {}) });
+    const buy: Store['buy'] = async (listingId, delivery, country, extraIds, tipCents) => {
+      const answer = await pay({ action: 'checkout', lang: getLang(), listing_id: listingId, delivery, ...(country ? { country } : {}), ...(extraIds && extraIds.length > 0 ? { extra_ids: extraIds } : {}), ...(tipCents ? { tip_cents: tipCents } : {}) });
       if (answer.error) return { error: answer.error };
       return answer.data?.url ? { url: String(answer.data.url) } : { error: PAY_ERRORS.stripe_error };
     };

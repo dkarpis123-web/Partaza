@@ -67,6 +67,9 @@ export interface SavedSearch {
   seenAt: number;
 }
 
+/** Where a seller sends parts: only in their own country, to EU countries, to all of Europe (with the UK, Norway, Switzerland…), or anywhere. */
+export type ShipZone = 'home' | 'eu' | 'europe' | 'world';
+
 export interface Listing {
   id: string;
   title: string;
@@ -89,6 +92,8 @@ export interface Listing {
   shipping: number | null;
   /** Delivery price to other countries; null = a buyer abroad asks the seller first. */
   shippingAbroad?: number | null;
+  /** Where the seller sends the part; missing = to EU countries. */
+  shipZone?: ShipZone;
   /** Defect marks on photos: photo address → [x, y] points as shares of the picture's size. */
   photoMarks?: Record<string, number[][]>;
   /** The seller ships but has not set a price: the buyer asks for it in a message. */
@@ -218,6 +223,8 @@ export interface PaidOrder {
   itemAmount: number;
   shippingAmount: number;
   feeAmount: number;
+  /** The buyer's voluntary contribution to Partaza, 0 if none. */
+  tipAmount?: number;
   total: number;
   delivery: 'shipping' | 'pickup';
   status: PaidOrderStatus;

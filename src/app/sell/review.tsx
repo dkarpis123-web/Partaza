@@ -9,11 +9,13 @@ import { PriceOptions } from '@/components/PriceOptions';
 import { ShippingEstimate } from '@/components/ShippingEstimate';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
+import { FilterBar } from '@/components/FilterBar';
+import { SHIP_ZONES } from '@/services/shipping';
 import { COUNTRIES, CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, detectCountry, useGeo } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
-import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
+import { CONDITION_LABELS, Condition, Listing, ShipZone, VEHICLE_LABELS, VehicleType } from '@/types';
 import { Text } from '@/components/Text';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
@@ -97,6 +99,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [vat, setVat] = useState(editing?.vat ?? false);
   const [shipMode, setShipMode] = useState<ShipMode>(editing ? (editing.shipping !== null ? 'price' : editing.shippingQuote ? 'quote' : 'pickup') : whole ? 'pickup' : 'price');
   const [abroadText, setAbroadText] = useState(editing?.shippingAbroad != null ? toText(editing.shippingAbroad) : '');
+  const [shipZone, setShipZone] = useState<ShipZone>(editing?.shipZone ?? 'eu');
   const [shipText, setShipText] = useState(editing?.shipping != null ? toText(editing.shipping) : whole ? '' : '3,50');
   const [vatHint, setVatHint] = useState(false);
   const [city, setCity] = useState(editing?.city ?? '');
@@ -230,7 +233,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   if (price === null) found.price = priceText.trim() ? 'Kainą įrašykite skaičiumi, pvz., 85 arba 85,50.' : 'Įrašykite kainą, pvz., 85 arba 85,50.';
   if (!city.trim()) found.city = 'Įrašykite miestą, kuriame yra dalis.';
   if (shipMode === 'price' && parsePrice(shipText) === null) found.ship = 'Įrašykite siuntimo kainą, pvz., 3,50, arba pasirinkite kitą siuntimo būdą.';
-  if (shipMode === 'price' && abroadText.trim() && parsePrice(abroadText) === null) found.abroad = 'Siuntimo į kitas šalis kainą įrašykite skaičiumi, pvz., 12,00, arba palikite laukelį tuščią.';
+  if (shipMode === 'price' && shipZone !== 'home' && abroadText.trim() && parsePrice(abroadText) === null) found.abroad = 'Siuntimo į kitas šalis kainą įrašykite skaičiumi, pvz., 12,00, arba palikite laukelį tuščią.';
   if (!donor && costText.trim() && parsePrice(costText) === null) found.cost = 'Pirkimo kainą įrašykite skaičiumi, pvz., 20.';
   const problems = Object.values(found);
   const shown = tried ? found : {};
@@ -260,7 +263,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       return;
     }
     const shipping = shipMode === 'price' ? parsePrice(shipText) : null;
-    const shippingAbroad = shipMode === 'price' && abroadText.trim() ? parsePrice(abroadText) : null;
+    const shippingAbroad = shipMode === 'price' && shipZone !== 'home' && abroadText.trim() ? parsePrice(abroadText) : null;
     const shippingQuote = shipMode === 'quote';
     const cost = costText.trim() ? parsePrice(costText) : null;
     if (!registered) {
@@ -273,7 +276,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     setPublishing(true);
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), altCodes: altCodes.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, photoMarks: marks, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, shipZone, pickup: true, photos, photoMarks: marks, allowOffers,
       classic, motorsport, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
     if (editing) {
@@ -284,7 +287,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     }
     const result = await addListing(whole ? draft : { description: description.trim(),
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), altCodes: altCodes.trim(), fits: fits.trim(), vehicleType,
-      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, photoMarks: marks, allowOffers,
+      city: city.trim(), country, shipping, shippingQuote, shippingAbroad, shipZone, pickup: true, photos, photoMarks: marks, allowOffers,
       classic, motorsport, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     });
     setPublishing(false);
@@ -575,6 +578,11 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           <Chip label="Kainos nenurodau – pirkėjas siunčia užklausą" selected={shipMode === 'quote'} onPress={() => setShipMode('quote')} />
           <Chip label="Tik atsiėmimas vietoje" selected={shipMode === 'pickup'} onPress={() => setShipMode('pickup')} />
         </View>
+        {shipMode !== 'pickup' ? (
+          <FilterBar
+            filters={[{ key: 'zone', label: 'Siunčiu', value: shipZone, options: SHIP_ZONES, onSelect: (v) => setShipZone(v as ShipZone) }]}
+          />
+        ) : null}
         {shipMode === 'price' ? (
           <>
             <Field label="Siuntimo kaina jūsų šalyje, €" value={shipText} onChangeText={setShipText} keyboardType="decimal-pad" placeholder="0,00" error={shown.ship} />
@@ -585,11 +593,13 @@ function ReviewForm({ editing }: { editing?: Listing }) {
               ))}
             </View>
             {live && (title.trim() || oem.trim()) ? <ShippingEstimate title={title.trim()} oem={oem.trim()} fits={fits.trim()} from={country} to={country} current={parsePrice(shipText)} onUse={(p) => setShipText(toText(p))} /> : null}
-            <Field label="Siuntimo kaina į kitas ES šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" error={shown.abroad} hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
+            {shipZone !== 'home' ? (
+              <Field label="Siuntimo kaina į kitas šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" error={shown.abroad} hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
+            ) : null}
             <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas.</Notice>
           </>
         ) : null}
-        {shipMode !== 'pickup' ? <Muted>{crossesEuBorder(country, null) ? CUSTOMS_NOTE : 'Siunčiant ne į Europos Sąjungą, gali būti taikomi muito, importo PVM ir kiti mokesčiai.'}</Muted> : null}
+        {shipMode !== 'pickup' && shipZone !== 'home' ? <Muted>{crossesEuBorder(country, null) ? CUSTOMS_NOTE : 'Siunčiant ne į Europos Sąjungą, gali būti taikomi muito, importo PVM ir kiti mokesčiai.'}</Muted> : null}
         {shipMode === 'quote' ? <Muted>Pirkėjas matys mygtuką „Klausti siuntimo kainos“ ir parašys jums žinutę su savo šalimi ir miestu.</Muted> : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ flex: 1 }}>

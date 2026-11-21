@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -10,8 +11,8 @@ import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitVerdict } from '@/services/fitment';
 import { modelSearchTerm, readVin } from '@/services/vin';
-import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
-import { shippingTo } from '@/services/shipping';
+import { countryLabel, countryName, useDestination } from '@/services/geo';
+import { EU, EUROPE_NON_EU, shippingTo, shipsTo } from '@/services/shipping';
 import { tr, useLang } from '@/i18n';
 import { newMatches, normalize, promoted, textMatches } from '@/services/match';
 import { useStore } from '@/store';
@@ -20,6 +21,23 @@ import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
 import { Text, TextInput } from '@/components/Text';
 
 type Sort = 'cheapest' | 'newest' | 'place';
+/** reach = parts that can get to the buyer; home = only in the buyer's country; country = one chosen country. */
+type Area = 'reach' | 'home' | 'eu' | 'europe' | 'all' | 'country';
+const AREAS: Area[] = ['reach', 'home', 'eu', 'europe', 'all', 'country'];
+const AREA_KEY = 'partaza.searchArea';
+let savedArea: Area | null = null;
+/** The buyer's last choice of place, kept on the device so the next search starts there. */
+function rememberArea(next: Area) {
+  savedArea = next;
+  AsyncStorage.setItem(AREA_KEY, next).catch(() => {});
+}
+async function loadArea(): Promise<Area | null> {
+  if (savedArea) return null;
+  const v = await AsyncStorage.getItem(AREA_KEY).catch(() => null);
+  if (!v || !AREAS.includes(v as Area)) return null;
+  savedArea = v as Area;
+  return savedArea;
+}
 const SORT_LABELS: Record<Sort, string> = {
   cheapest: 'Pigiausi su pristatymu',
   newest: 'Naujausi',
@@ -49,6 +67,15 @@ export default function SearchScreen() {
   }, [query, live, searchServer]);
   const [type, setType] = useState<VehicleType | null>((params.type as VehicleType) || null);
   const [country, setCountry] = useState<string | null>(null);
+  // Where the parts are: by default only those that can reach the buyer (sent there, or picked up in their own country).
+  const [area, setAreaState] = useState<Area>(() => savedArea ?? 'reach');
+  const setArea = (next: Area) => {
+    setAreaState(next);
+    rememberArea(next);
+  };
+  useEffect(() => {
+    loadArea().then((v) => { if (v) setAreaState(v); }).catch(() => {});
+  }, []);
   const [city, setCity] = useState('');
   const [onlyNoDefects, setOnlyNoDefects] = useState(false);
   const [onlyClassic, setOnlyClassic] = useState(params.special === 'classic');
@@ -91,16 +118,19 @@ export default function SearchScreen() {
     if (params.type !== undefined) setType((params.type as VehicleType) || null);
   }
 
-  const countries = useMemo(() => Array.from(new Set(listings.map((l) => l.country))).sort(), [listings]);
-  // Once the listings are known, start in the visitor's own country if there is anything to show there.
-  const home = useGeo().place?.country ?? null;
-  const [suggestedFor, setSuggestedFor] = useState<string | null | undefined>(undefined);
-  const [editPlace, setEditPlace] = useState(false);
   const { country: dest } = useDestination();
-  if (countries.length > 0 && suggestedFor !== home) {
-    setSuggestedFor(home);
-    if (home && countries.includes(home) && (country === null || country === suggestedFor)) setCountry(home);
-  }
+  const countries = useMemo(() => Array.from(new Set(listings.map((l) => l.country))).sort(), [listings]);
+  // Cities with parts in the chosen country (or everywhere), one entry per city however it is capitalised.
+  const cities = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const l of listings) {
+      const inside = area === 'home' ? dest : area === 'country' ? country : null;
+      if ((l.status ?? 'active') !== 'active' || (inside && l.country !== inside) || !l.city?.trim()) continue;
+      const key = normalize(l.city);
+      if (!seen.has(key)) seen.set(key, l.city.trim());
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, 'lt'));
+  }, [listings, area, country, dest]);
 
   const current = { query: query.trim(), vehicleType: type, country, city: city.trim() };
   const canSave = !!(current.query || current.vehicleType || current.country || current.city);
@@ -118,6 +148,7 @@ export default function SearchScreen() {
     setQuery(s.query);
     setType(s.vehicleType);
     setCountry(s.country);
+    if (s.country) setArea('country');
     setCity(s.city);
     markSearchSeen(s.id);
   };
@@ -156,15 +187,20 @@ export default function SearchScreen() {
     const filtered = listings.filter((l) => {
       if (!textMatches(l, query)) return false;
       if (type && l.vehicleType !== type) return false;
-      if (country && l.country !== country) return false;
-      if (c && !normalize(l.city).includes(c)) return false;
+      if (area === 'country' && country && l.country !== country) return false;
+      if (area === 'reach' && dest && !(shipsTo(l, dest) || (l.pickup && l.country === dest))) return false;
+      if (area === 'home' && dest && l.country !== dest) return false;
+      if (area === 'eu' && !EU.includes(l.country)) return false;
+      if (area === 'europe' && !EU.includes(l.country) && !EUROPE_NON_EU.includes(l.country)) return false;
+      if (c && normalize(l.city) !== c) return false;
       if (onlyNoDefects && l.defects.length > 0) return false;
       if (onlyClassic && !l.classic) return false;
       if (onlyMotorsport && !l.motorsport) return false;
       if (onlyWhole && !l.wholeVehicle) return false;
       if (onlyMyCar && myCar && fitVerdict(l, myCar) !== 'fits') return false;
       if ((l.status ?? 'active') !== 'active') return false;
-      const deliverable = l.shipping !== null;
+      // With a delivery country known, only parts the seller actually sends there count as deliverable.
+      const deliverable = (l.shipping !== null || l.shippingQuote) && (!dest || shipsTo(l, dest));
       if (!((delivery && deliverable) || (pickup && l.pickup))) return false;
       return true;
     });
@@ -182,7 +218,7 @@ export default function SearchScreen() {
       if (tb !== null) return 1;
       return a.price - b.price;
     });
-  }, [listings, query, type, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit, dest]);
+  }, [listings, query, type, area, country, city, onlyNoDefects, onlyClassic, onlyMotorsport, onlyWhole, onlyMyCar, myCar, delivery, pickup, sort, photoHit, dest]);
 
   return (
     <Page>
@@ -271,40 +307,35 @@ export default function SearchScreen() {
         </Card>
       ) : null}
       <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13, color: colors.muted }}>Ieškoma čia</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>
-              {`${country ? countryLabel(country) : tr('Visos šalys')}${city.trim() ? ` · ${city.trim()}` : ''}`}
-            </Text>
-          </View>
-          <Button label={editPlace ? 'Gerai' : 'Keisti'} kind="outline" onPress={() => setEditPlace((v) => !v)} />
-        </View>
-        {editPlace ? (
-          <>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Chip label="Visos šalys" selected={country === null} onPress={() => setCountry(null)} />
-              {countries.map((c) => (
-                <Chip key={c} label={countryLabel(c)} selected={country === c} onPress={() => setCountry(c)} />
-              ))}
-            </View>
-            <TextInput
-              accessibilityLabel="Miestas"
-              placeholder="Miestas, pvz., Kaunas"
-              placeholderTextColor={colors.muted}
-              value={city}
-              onChangeText={setCity}
-              style={{ minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, fontSize: 15, color: colors.ink }}
-            />
-          </>
-        ) : home && country === home ? (
-          <Muted>Šalis parinkta pagal jūsų vietą.</Muted>
-        ) : null}
-        <View style={{ height: 1, backgroundColor: colors.border }} />
         <DestinationPicker />
       </Card>
       <FilterBar
         filters={[
+          {
+            key: 'area', label: 'Vieta', value: area === 'country' && country ? `c:${country}` : area, active: area !== 'all',
+            options: [
+              ...(dest ? [{ value: 'reach', label: `${tr('Pasiekia mano šalį')} (${countryName(dest)})` }, { value: 'home', label: `${tr('Tik')} ${countryName(dest)}` }] : []),
+              { value: 'eu', label: tr('Europos Sąjunga') },
+              { value: 'europe', label: tr('Visa Europa') },
+              { value: 'all', label: tr('Visas pasaulis') },
+              ...countries.filter((c) => c !== dest).map((c) => ({ value: `c:${c}`, label: countryLabel(c) })),
+            ],
+            onSelect: (v) => {
+              setCity('');
+              if (v.startsWith('c:')) {
+                setCountry(v.slice(2));
+                setArea('country');
+              } else {
+                setCountry(null);
+                setArea(v as Area);
+              }
+            },
+          },
+          ...(cities.length > 0 && (area === 'country' || area === 'home') ? [{
+            key: 'city', label: 'Miestas', value: city ? normalize(city) : 'all', active: !!city,
+            options: [{ value: 'all', label: tr('Visi miestai') }, ...cities.map((c) => ({ value: normalize(c), label: c }))],
+            onSelect: (v: string) => setCity(v === 'all' ? '' : cities.find((c) => normalize(c) === v) ?? ''),
+          }] : []),
           { key: 'sort', label: 'Rikiuoti', value: sort, options: (Object.keys(SORT_LABELS) as Sort[]).map((v) => ({ value: v, label: SORT_LABELS[v] })), onSelect: (v) => setSort(v as Sort) },
           {
             key: 'type', label: 'Transportas', value: type ?? 'all', active: type !== null,

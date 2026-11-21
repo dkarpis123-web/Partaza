@@ -11,6 +11,7 @@ import { CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, useDestinatio
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { tr, useLang } from '@/i18n';
+import { SHIP_ZONE_SHORT, shippingTo, shipsTo } from '@/services/shipping';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 import { Text } from '@/components/Text';
 import { AiReview } from '@/components/AiReview';
@@ -83,7 +84,8 @@ export default function ListingScreen() {
     router.push(`/chat/${opened.id}`);
   };
   const abroad = !!dest && dest !== listing.country;
-  const abroadPrice = abroad ? listing.shippingAbroad ?? null : null;
+  const sendsThere = !dest || shipsTo(listing, dest);
+  const abroadPrice = abroad ? shippingTo(listing, dest) : null;
 
   const sendReport = async () => {
     if (live && !registered) return router.push('/register');
@@ -303,10 +305,14 @@ export default function ListingScreen() {
         {listing.altCodes ? <Row label="Kiti kodai" value={listing.altCodes} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
+        {listing.shipping !== null || listing.shippingQuote ? <Row label="Siunčia" value={tr(SHIP_ZONE_SHORT[listing.shipZone ?? 'eu'])} /> : null}
         {!mine && (listing.shipping !== null || listing.shippingQuote) ? <DestinationPicker /> : null}
+        {!mine && dest && (listing.shipping !== null || listing.shippingQuote) && !sendsThere ? (
+          <Notice tone="warn">{`${tr('Pardavėjas į šią šalį nesiunčia')}: ${countryName(dest)}.${listing.pickup ? ` ${tr('Galite atsiimti vietoje arba paklausti pardavėjo žinute.')}` : ''}`}</Notice>
+        ) : null}
         {abroad && listing.shipping !== null && abroadPrice !== null ? <Row label={`${tr('Siuntimas į')} ${countryName(dest ?? '')}`} value={money(abroadPrice)} /> : null}
-        {(listing.shipping !== null || listing.shippingQuote) && crossesEuBorder(listing.country, dest) ? <Muted>{CUSTOMS_NOTE}</Muted> : null}
-        {!mine && (listing.shippingQuote || (abroad && listing.shipping !== null && abroadPrice === null)) ? (
+        {(listing.shipping !== null || listing.shippingQuote) && sendsThere && crossesEuBorder(listing.country, dest) ? <Muted>{CUSTOMS_NOTE}</Muted> : null}
+        {!mine && sendsThere && (listing.shippingQuote || (abroad && listing.shipping !== null && abroadPrice === null)) ? (
           <>
             {abroad && listing.shipping !== null ? <Muted>Nurodyta siuntimo kaina galioja pardavėjo šalyje. Siuntimo į jūsų šalį kainos teiraukitės pardavėjo.</Muted> : null}
             <Button label="Klausti siuntimo kainos" kind="outline" onPress={askShipping} />

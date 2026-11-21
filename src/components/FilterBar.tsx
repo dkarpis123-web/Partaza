@@ -49,7 +49,7 @@ export function FilterBar({ filters }: { filters: Filter[] }) {
         })}
       </ScrollView>
       {current ? (
-        <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface, overflow: 'hidden' }}>
+        <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 340, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface }}>
           {current.options.map((o) => {
             const picked = o.value === current.value;
             return (
@@ -64,7 +64,7 @@ export function FilterBar({ filters }: { filters: Filter[] }) {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       ) : null}
     </View>
   );
