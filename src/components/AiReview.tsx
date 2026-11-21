@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { Text } from '@/components/Text';
 import { Button, Card, Muted, Notice } from '@/components/ui';
+import { PriceOptions } from '@/components/PriceOptions';
 import { tr } from '@/i18n';
 import { WebPrices } from '@/services/ai';
 import { openExternal } from '@/services/open';
@@ -26,7 +27,7 @@ export function AiReview({ listing }: { listing: Listing }) {
   const askPrices = async () => {
     setPriceBusy(true);
     setPriceProblem('');
-    const answer = await aiPrices({ title: listing.title, oem: listing.oem, fits: listing.fits, condition: listing.condition, defects: listing.defects.length > 0, country: listing.country });
+    const answer = await aiPrices({ title: listing.title, oem: listing.oem, fits: listing.fits, condition: listing.condition, defects: false, country: listing.country });
     setPriceBusy(false);
     setPrices(answer.prices ?? null);
     setPriceProblem(answer.error ?? '');
@@ -79,6 +80,7 @@ export function AiReview({ listing }: { listing: Listing }) {
             {prices.sources.map((s) => (
               <Button key={s.url} label={`${s.title}${s.price ? ` · ${money(s.price)}` : ''}`} kind="quiet" onPress={() => openExternal(s.url)} />
             ))}
+            <PriceOptions prices={prices} damaged={listing.defects.length > 0} current={listing.price} />
             <Muted>Kainą pakeisite paspaudę „Redaguoti skelbimą“.</Muted>
           </>
         ) : null}

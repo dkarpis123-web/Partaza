@@ -235,7 +235,8 @@ export default function SearchScreen() {
           <Field label="Metai (nebūtina)" value={yearText || (vinInfo?.year ? String(vinInfo.year) : '')} onChangeText={(t) => setYearText(t.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" placeholder="Pvz., 2016" />
           <Muted>Arba pasirinkite iš sąrašo:</Muted>
           <CarPicker
-            picked={[`${makeText} ${modelText}`.trim()]}
+            addLabel="Pasirinkti"
+            picked={[]}
             onPick={(make, model) => {
               setMakeText(make);
               setModelText(model);

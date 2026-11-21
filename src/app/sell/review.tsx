@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-n
 import { CarPicker } from '@/components/CarPicker';
 import { type Marks, remapMarks } from '@/components/MarkedPhoto';
 import { PhotoEditor } from '@/components/PhotoEditor';
+import { PriceOptions } from '@/components/PriceOptions';
 import { ShippingEstimate } from '@/components/ShippingEstimate';
 import { Button, Card, Chip, Field, Heading, Muted, Notice, Page } from '@/components/ui';
 import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices } from '@/services/ai';
@@ -151,7 +152,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (webBusy) return;
     setWebBusy(true);
     setWebProblem('');
-    const answer = await aiPrices({ title: title.trim(), oem: oem.trim(), fits: fits.trim(), condition, defects: defects.length > 0, country });
+    const answer = await aiPrices({ title: title.trim(), oem: oem.trim(), fits: fits.trim(), condition, defects: false, country }); // prices of undamaged parts; the discount for damage is ours
     setWebBusy(false);
     setWebPrices(answer.prices ?? null);
     setWebProblem(answer.error ?? '');
@@ -404,9 +405,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             {webPrices?.found ? (
               <View style={{ gap: 8 }}>
                 <Notice>{`${tr('Internete panašios dalys siūlomos už')} ${money(webPrices.low ?? 0)}–${money(webPrices.high ?? 0)}, ${tr('dažniausiai apie')} ${money(webPrices.typical ?? 0)}. ${webPrices.note}`}</Notice>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  <Chip label={`${tr('Naudoti')} ${money(Math.round(webPrices.typical ?? 0))}`} selected={price === Math.round(webPrices.typical ?? 0)} onPress={() => setPriceText(String(Math.round(webPrices.typical ?? 0)))} />
-                </View>
+                <PriceOptions prices={webPrices} damaged={defects.length > 0} current={price} onUse={(v) => setPriceText(String(v))} />
                 {webPrices.sources.map((s) => (
                   <Pressable key={s.url} accessibilityRole="link" onPress={() => Linking.openURL(s.url)} style={{ minHeight: 32, justifyContent: 'center' }}>
                     <Text style={{ fontSize: 13, color: colors.accent, textDecorationLine: 'underline' }}>{`${s.price ? `${money(s.price)} · ` : ''}${s.title || s.url}`}</Text>
