@@ -50,6 +50,18 @@
         }
       ]
     ],
-    "scheme": "partaza"
+    "scheme": "partaza",
+    "owner": "sintela-mb",
+    "extra": {
+      "eas": {
+        "projectId": "340ff1ee-21a5-44e6-8bf9-c022e2a66a19"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/340ff1ee-21a5-44e6-8bf9-c022e2a66a19"
+    }
   }
 }

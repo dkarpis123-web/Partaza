@@ -1,0 +1,38 @@
+# Sends the newest app code to phones that already have the test app installed (EAS Update), without a new build.
+# Runs after every change to the app's code. An update only reaches builds with the same native code
+# (runtime version = fingerprint); after a new native module is added, a new build is needed instead.
+# Needs the repository secret EXPO_TOKEN.
+name: App update over the air
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'app.json'
+      - 'package.json'
+concurrency:
+  group: app-update
+  cancel-in-progress: true
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Publish the update
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://vpywtkqgbglqxufhzuct.supabase.co
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_kmtHF8uo5NnmnuquFaq-lA_A5D-y6rW
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || 'Manual update' }}
+        run: eas update --channel preview --platform android --message "$(printf '%s' "$COMMIT_MESSAGE" | head -n 1 | cut -c1-120)" --non-interactive
