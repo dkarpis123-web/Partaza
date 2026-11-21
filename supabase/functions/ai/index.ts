@@ -1,6 +1,6 @@
 // Partaza AI helpers for sellers, run on Claude:
 //   { action: 'recognize', photos: [public photo URLs], codes: [barcodes / QR codes read on the device], lang }
-//                                                                  → title, part number, fit, vehicle type, visible damage; the part is named by its number,
+//                                                                  → title, part number, other codes on the part, fit, vehicle type, visible damage; the part is named by its number,
 //                                                                    failing that by a barcode / QR code, failing that by its look - and the look is always checked
 //   { action: 'match', photo: public photo URL, lang }               → which listings on the marketplace show the same kind of part
 //   { action: 'improve', listing_id, lang }                        → corrected title, description, part number and fit for the caller's own listing
@@ -77,7 +77,18 @@ const language = (lang: unknown) => (lang === 'en' ? 'English' : 'Lithuanian');
 interface Candidate {
   title: string;
   fits: string;
+  /** false when no page showed the number and the vehicles were found by the part's name and make instead. */
+  exact: boolean;
+  /** The code the supporting pages showed: the part number or one of the other codes on the part. */
+  matched: string;
 }
+
+// How production years are written, said the same way everywhere so the answers do not copy an example's years.
+const YEARS_RULE =
+  'Each vehicle as make, model, generation code and the years this part is fitted to it, in the form "Make Model (code) YYYY-YYYY". ' +
+  'Take the years from the sources for this part; if they give none, use the production years of that generation. ' +
+  'If the vehicle is still produced, or the sources show the part on the newest model years, leave the range open: "YYYY-". ' +
+  'Check each vehicle separately - different vehicles have different years; never repeat one range for all of them and never close a range by guessing.';
 
 /**
  * Looks a part number up on the web: what the part really is and which vehicles it fits.
@@ -85,15 +96,20 @@ interface Candidate {
  * three candidates, the best-supported first; when sources disagree each reading is its own candidate,
  * so the seller chooses instead of the AI guessing. Empty when nothing was found.
  */
-async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''): Promise<Candidate[]> {
+async function lookupNumber(oem: string, guess: string, lang: unknown, hint = '', others: string[] = []): Promise<Candidate[]> {
   const compact = oem.replace(/[^A-Za-z0-9]/g, '');
   if (compact.length < 5) return [];
+  // Sellers and catalogues often list a part under a supplier, casting or label code instead of the part number.
+  const also = others.length > 0
+    ? `Other codes on the part or its labels: ${others.join(', ')}. They may be supplier, casting or catalogue codes rather than the part number, but parts are often listed online under them. ` +
+      `Search these too (each with the make or the part name, since short codes are ambiguous); a page showing one of them on this kind of part counts as a source - say in matched which code it was. `
+    : '';
   try {
     const result = await claude({
       model: SEARCH_MODEL,
       max_tokens: 3500,
       tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
+        { type: 'web_search_20250305', name: 'web_search', max_uses: 7 },
         {
           name: 'report_part',
           description: 'Reports what the part with this number is and which vehicles it fits. Call it once, after searching.',
@@ -107,10 +123,12 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
                   type: 'object',
                   properties: {
                     title: { type: 'string', description: `Listing title in ${language(lang)}: the part name as catalogues and sellers of this exact number call it, with side or position if they give it. At most 90 characters.` },
-                    fits: { type: 'string', description: 'Vehicles the sources list for this number, comma-separated, most common first, up to 8 vehicles and 300 characters. Each as make, model, generation code and its production years, e.g. "Mercedes-Benz ML (W166) 2011-2015, Mercedes-Benz GLE (W166) 2015-2018". Always give the year range: from the sources, or the known production years of that generation. Never leave a vehicle without years and never invent a range.' },
+                    fits: { type: 'string', description: `Vehicles the sources list for this part, comma-separated, most common first, up to 8 vehicles and 300 characters. ${YEARS_RULE}` },
                     sources: { type: 'integer', description: 'How many separate pages in the results support this reading.' },
+                    by_number: { type: 'boolean', description: 'true if pages showing this number, its base number or one of the other codes support this reading; false if no page showed any of them and this comes from searching the part by its name and make.' },
+                    matched: { type: 'string', description: 'The number or code, exactly as given above, that the supporting pages showed. Empty if by_number is false.' },
                   },
-                  required: ['title', 'fits', 'sources'],
+                  required: ['title', 'fits', 'sources', 'by_number', 'matched'],
                 },
               },
             },
@@ -127,8 +145,12 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
           `and, if results are thin, with the manufacturer's name, on parts catalogues, dismantlers and marketplaces. ` +
           `Many makers end the number with a revision or colour suffix (for example "-00-B", a trailing letter, or a last digit group): if the full number gives nothing, search it without that suffix too - ` +
           `a page showing the same base number with another revision is the same part and counts as a source. Keep searching with different wordings until the searches are used up before reporting nothing. ` +
+          also +
           `Read what the pages that show this exact number call the part. The number decides: if the sources name a different part than the photo guess, the sources are right. ` +
           `If the sources agree, give one candidate. If they name different parts, give each as its own candidate with how many pages support it - do not pick one by guessing. ` +
+          `If after all that no page shows the number or any of the codes, do not stop: use the remaining searches to look the part up by its name and make (from the photo guess and clues) and find which vehicles and model years use such a part, ` +
+          `and report that as one candidate with by_number false. ` +
+          `Years matter: buyers filter by them. Look for the years in the sources and check whether the part is still fitted to current models. ` +
           `Ignore pages about other numbers. Then call the report_part tool exactly once (do not answer in plain text).`,
       }],
     });
@@ -138,7 +160,7 @@ async function lookupNumber(oem: string, guess: string, lang: unknown, hint = ''
       .filter((c: Json) => text(c?.title, 120))
       .sort((a: Json, b: Json) => (Number(b.sources) || 0) - (Number(a.sources) || 0))
       .slice(0, 3)
-      .map((c: Json) => ({ title: text(c.title, 120), fits: text(c.fits, 300) }));
+      .map((c: Json) => ({ title: text(c.title, 120), fits: text(c.fits, 300), exact: c.by_number !== false, matched: text(c.matched, 60) }));
   } catch (error) {
     console.error('ai: number lookup failed', (error as Error).message);
     return [];
@@ -234,10 +256,10 @@ async function recognize(body: Json): Promise<Json> {
         properties: {
           title: { type: 'string', description: 'Short listing title naming the part, e.g. "Front brake discs, pair". Empty if the photos do not show a vehicle part.' },
           oem: { type: 'string', description: 'Part / OEM number exactly as readable on the part or its label. Empty if none is clearly readable. Never guess.' },
-          fits: { type: 'string', description: 'Vehicles the part fits: any make or model visible on the part, its label or packaging, or that follows from the part number and the manufacturer\'s numbering scheme. Several candidates are fine. Empty only if nothing points to a vehicle.' },
+          fits: { type: 'string', description: 'Vehicles the part fits, comma-separated and nothing else (no explanations in brackets): any make or model visible on the part, its label or packaging, or that follows from the part number and the manufacturer\'s numbering scheme. Several candidates are fine. Add production years only when you are sure of them, open-ended ("2020-") for vehicles still produced. Empty only if nothing points to a vehicle.' },
           vehicle_type: { type: 'string', enum: VEHICLE_TYPES },
           defects: { type: 'array', items: { type: 'string' }, description: 'Visible damage or wear, one short phrase each. Empty if none is visible.' },
-          codes: { type: 'array', items: { type: 'string' }, description: 'Other numbers readable on the part or its labels, especially the digits printed under a barcode or next to a QR code (supplier numbers, serial numbers). Exactly as written. Empty if none.' },
+          codes: { type: 'array', items: { type: 'string' }, description: 'Every other code readable on the part or its labels besides the part number: supplier and manufacturer codes, casting numbers, short catalogue codes, the digits under a barcode or next to a QR code. Exactly as written, one per entry. Leave out dates, serial numbers and lot numbers when they are marked as such. Empty if none.' },
           looks_like: { type: 'string', description: 'What the part is judging ONLY by its shape, size, connectors and mounting points, as if it had no label at all. A short phrase.' },
         },
         required: ['title', 'oem', 'fits', 'vehicle_type', 'defects', 'codes', 'looks_like'],
@@ -255,22 +277,18 @@ async function recognize(body: Json): Promise<Json> {
   // Order of trust: the part number first, then barcodes / QR codes, then the look of the part.
   const seen = text(found.title, 120);
   const number = text(found.oem, 60);
-  let source: 'number' | 'code' | 'photo' = 'photo';
-  let candidates = await lookupNumber(number, seen, body.lang, text(found.fits, 200));
-  if (candidates.length > 0) source = 'number';
-  else {
-    // Codes read by the phone from barcodes and QR codes, then other numbers printed on the labels.
-    const scanned = (Array.isArray(body.codes) ? body.codes : []).map((c: unknown) => text(c, 120));
-    const printed = (Array.isArray(found.codes) ? found.codes : []).map((c: unknown) => text(c, 60));
-    const tries = partCodes([...scanned, ...printed], number).slice(0, 2);
-    for (const code of tries) {
-      candidates = await lookupNumber(code, seen, body.lang, text(found.fits, 200));
-      if (candidates.length > 0) {
-        source = 'code';
-        break;
-      }
-    }
-  }
+  // Every other code on the part: read by the phone from barcodes and QR codes, or printed on the labels.
+  const scanned = (Array.isArray(body.codes) ? body.codes : []).map((c: unknown) => text(c, 120));
+  const printed = (Array.isArray(found.codes) ? found.codes : []).map((c: unknown) => text(c, 60));
+  const others = partCodes([...scanned, ...printed], number).slice(0, 5);
+  // One search over all of them: the part number first; with no part number, the first code stands in for it.
+  const main = number || others[0] || '';
+  const all = await lookupNumber(main, seen, body.lang, text(found.fits, 200), others.filter((c) => c !== main));
+  // Vehicles and years found by the part's name when no page showed any code: used for the fit only.
+  const byName = all.find((c) => !c.exact)?.fits ?? '';
+  const candidates = all.filter((c) => c.exact);
+  const viaNumber = !!number && candidates.length > 0 && (!candidates[0].matched || bare(candidates[0].matched) === bare(number) || bare(number).startsWith(bare(candidates[0].matched)));
+  const source: 'number' | 'code' | 'photo' = candidates.length === 0 ? 'photo' : viaNumber ? 'number' : 'code';
   const best = candidates[0];
   // The look of the part is checked every time: a label can be swapped onto another part.
   const check = best ? await looksRight(photos, candidates.map((c) => c.title), body.lang) : { verdicts: [], note: '' };
@@ -281,7 +299,8 @@ async function recognize(body: Json): Promise<Json> {
   return {
     title: best?.title || seen,
     oem: number,
-    fits: best?.fits || text(found.fits, 200),
+    codes: others,
+    fits: best?.fits || byName || text(found.fits, 200),
     by_number: !!best,
     source,
     appearance,
@@ -535,7 +554,7 @@ async function improve(body: Json, admin: any, userId: string): Promise<Json> {
   if (!text(found.title, 120)) return { error: 'ai_error' };
   const notes = (Array.isArray(found.notes) ? found.notes : []).map((n: unknown) => text(n, 240)).filter(Boolean).slice(0, 6);
   // The part number decides the fit: vehicles found for it on the web replace the seller's list.
-  const candidates = await lookupNumber(text(found.oem, 60), text(found.title, 120), body.lang, text(found.fits, 200));
+  const candidates = (await lookupNumber(text(found.oem, 60), text(found.title, 120), body.lang, text(found.fits, 200))).filter((c) => c.exact);
   const byNumber = candidates[0]?.fits ?? '';
   if (byNumber) notes.push(body.lang === 'en' ? 'Fitment was chosen by the part number from public sources – please check it.' : 'Tinkamumas parinktas pagal dalies numerį iš viešų šaltinių – patikrinkite.');
   if (candidates[0] && !sameText(candidates[0].title, text(found.title, 120))) {

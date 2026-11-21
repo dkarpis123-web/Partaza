@@ -13,7 +13,7 @@ import { modelSearchTerm, readVin } from '@/services/vin';
 import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
 import { shippingTo } from '@/services/shipping';
 import { tr, useLang } from '@/i18n';
-import { newMatches, normalize } from '@/services/match';
+import { newMatches, normalize, textMatches } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -146,10 +146,9 @@ export default function SearchScreen() {
     if (photoHit && photoHit.ids.length > 0) {
       return photoHit.ids.map((id) => listings.find((l) => l.id === id)).filter((l): l is Listing => !!l && (l.status ?? 'active') === 'active');
     }
-    const q = normalize(query);
     const c = normalize(city);
     const filtered = listings.filter((l) => {
-      if (q && !normalize(`${l.title} ${l.oem} ${l.fits} ${l.description ?? ''}`).includes(q)) return false;
+      if (!textMatches(l, query)) return false;
       if (type && l.vehicleType !== type) return false;
       if (country && l.country !== country) return false;
       if (c && !normalize(l.city).includes(c)) return false;

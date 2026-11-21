@@ -223,7 +223,7 @@ function rated(user: User, reviews: Review[]): User {
 function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
-    defects: row.defects ?? [], oem: row.oem ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
+    defects: row.defects ?? [], oem: row.oem ?? '', altCodes: row.alt_codes ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad), photoMarks: row.photo_marks && typeof row.photo_marks === 'object' ? row.photo_marks : {},
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : row.status === 'pending' ? 'pending' : row.status === 'rejected' ? 'rejected' : 'active',
@@ -752,7 +752,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!data) return { photos: uploaded.urls, error };
       return {
         photos: uploaded.urls,
-        result: { title: data.title ?? '', oem: data.oem ?? '', fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, source: data.source ?? 'photo', appearance: data.appearance ?? 'unsure', appearanceNote: data.appearance_note ?? '', byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
+        result: { title: data.title ?? '', oem: data.oem ?? '', codes: Array.isArray(data.codes) ? data.codes.filter((c: unknown) => typeof c === 'string') : [], fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, source: data.source ?? 'photo', appearance: data.appearance ?? 'unsure', appearanceNote: data.appearance_note ?? '', byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
       };
     };
 
@@ -986,7 +986,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .from('listings')
         .insert({
           seller_id: me.id, title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition,
-          defects: draft.defects, oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
+          defects: draft.defects, oem: draft.oem, alt_codes: (draft.altCodes ?? '').slice(0, 300), fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city,
           country: draft.country, shipping: draft.shipping, pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers,
           classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle, description: draft.description ?? '',
           photo_marks: remapMarks(draft.photoMarks, draft.photos, urls),
@@ -1019,7 +1019,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .from('listings')
           .update({
             title: draft.title, price: draft.price, vat: draft.vat, condition: draft.condition, defects: draft.defects,
-            oem: draft.oem, fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
+            oem: draft.oem, alt_codes: (draft.altCodes ?? '').slice(0, 300), fits: draft.fits, vehicle_type: draft.vehicleType, city: draft.city, shipping: draft.shipping,
             pickup: draft.pickup, photos: urls, allow_offers: draft.allowOffers, classic: !!draft.classic, motorsport: !!draft.motorsport, shipping_quote: !!draft.shippingQuote, shipping_abroad: draft.shippingAbroad ?? null, whole_vehicle: !!draft.wholeVehicle,
             description: draft.description ?? '', photo_marks: remapMarks(draft.photoMarks, draft.photos, urls),
           })

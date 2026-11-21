@@ -85,6 +85,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [isDemo, setIsDemo] = useState(false);
   const [title, setTitle] = useState(editing?.title ?? (whole && donor ? `${donor.name}, visas dalims` : ''));
   const [oem, setOem] = useState(editing?.oem ?? '');
+  const [altCodes, setAltCodes] = useState(editing?.altCodes ?? '');
   const [fits, setFits] = useState(editing?.fits ?? (whole && donor ? donor.name : ''));
   const [vehicleType, setVehicleType] = useState<VehicleType>(editing?.vehicleType ?? 'car');
   const [condition, setCondition] = useState<Condition>(editing?.condition ?? 'used');
@@ -139,6 +140,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (!proposal) return;
     setTitle(proposal.title);
     if (proposal.oem) setOem(proposal.oem);
+    if (proposal.codes?.length) setAltCodes(proposal.codes.join(', '));
     if (proposal.fits) setFits(proposal.fits);
     setVehicleType(proposal.vehicleType);
     if (proposal.suggestedDefects.length > 0) setDefects(proposal.suggestedDefects);
@@ -172,6 +174,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     const fill = (r: Recognition) => {
       setTitle(r.title);
       setOem(r.oem);
+      setAltCodes((r.codes ?? []).join(', '));
       setFits(r.fits);
       setVehicleType(r.vehicleType);
       setDefects(r.suggestedDefects);
@@ -265,7 +268,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (price === null) return;
     setPublishing(true);
     const draft = {
-      title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
+      title: title.trim(), price, vat, condition, defects, oem: oem.trim(), altCodes: altCodes.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, photoMarks: marks, allowOffers,
       classic, motorsport, wholeVehicle: whole, description: description.trim(), donorId: donor ? donor.id : null, cost: donor ? null : cost,
     };
@@ -276,7 +279,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       return router.back();
     }
     const result = await addListing(whole ? draft : { description: description.trim(),
-      title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
+      title: title.trim(), price, vat, condition, defects, oem: oem.trim(), altCodes: altCodes.trim(), fits: fits.trim(), vehicleType,
       city: city.trim(), country, shipping, shippingQuote, shippingAbroad, pickup: true, photos, photoMarks: marks, allowOffers,
       classic, motorsport, donorId: donor ? donor.id : null, cost: donor ? null : cost,
     });
@@ -398,6 +401,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       <Card>
         <Field label="Pavadinimas" value={title} onChangeText={setTitle} error={shown.title} />
         <Field label="Dalies (OEM) numeris" value={oem} onChangeText={setOem} hint="Pagal numerį pirkėjai ras dalį ir matysime panašių dalių kainas." />
+        <Field label="Kiti kodai ant dalies (nebūtina)" value={altCodes} onChangeText={(t) => setAltCodes(t.slice(0, 300))} placeholder="Pvz., 006904, 11872702" hint="Visi kiti ant dalies ar etiketės matomi kodai, atskirti kableliais. Nebūtina žinoti, kuris jų pagrindinis – pirkėjai ras dalį pagal bet kurį." />
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1 }}>
@@ -420,11 +424,12 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           <CarPicker
             type={vehicleType}
             picked={fitsList}
+            withYears
             onPick={(make, model) => {
               const item = `${make} ${model}`.trim();
               // Picking a car again removes it, with or without years after its name.
               const already = fitsList.filter((f) => f === item || f.startsWith(`${item} `));
-              setFits(already.length > 0 ? fitsList.filter((f) => !already.includes(f)).join(', ') : [...fitsList, yearsText ? `${item} ${yearsText}` : item].join(', '));
+              setFits(already.length > 0 ? fitsList.filter((f) => !already.includes(f)).join(', ') : [...fitsList, yearsText && !/(19|20)\d\d/.test(item) ? `${item} ${yearsText}` : item].join(', '));
             }}
           />
         ) : null}

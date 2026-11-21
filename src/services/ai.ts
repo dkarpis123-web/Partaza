@@ -14,6 +14,8 @@ export interface ShippingEstimate {
 export interface Recognition {
   title: string;
   oem: string;
+  /** Other codes read on the part or its labels, besides the part number. */
+  codes?: string[];
   fits: string;
   vehicleType: VehicleType;
   suggestedDefects: string[];

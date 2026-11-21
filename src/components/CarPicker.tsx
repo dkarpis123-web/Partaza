@@ -78,8 +78,10 @@ export function Dropdown({ label, value, options, open, onToggle, onSelect, disa
  * Make, model and (for common cars) generation chosen from drop-down lists instead of typing.
  * "Add" calls onPick with the make and the model (with its generation, if one was chosen).
  */
-export function CarPicker({ onPick, picked = [], type = 'car', addLabel = 'Pridėti' }: {
+export function CarPicker({ onPick, picked = [], type = 'car', addLabel = 'Pridėti', withYears = false }: {
   onPick: (make: string, model: string) => void; picked?: string[]; type?: VehicleType; addLabel?: string;
+  /** Keep the generation's production years in the model name (for a listing's fitment). */
+  withYears?: boolean;
 }) {
   const [make, setMake] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
@@ -101,7 +103,9 @@ export function CarPicker({ onPick, picked = [], type = 'car', addLabel = 'Prid�
   const makes = type === 'car' ? [...POPULAR_MAKES.filter((m) => all.includes(m)), ...all.filter((m) => !POPULAR_MAKES.includes(m))] : all;
   const models = make ? list[make] ?? [] : [];
   const generations = make && model && type === 'car' ? CAR_GENERATIONS[`${make} ${model}`] : undefined;
-  const modelName = model ? (generation && generation !== ALL_GENERATIONS ? `${model} ${generation.split(' (')[0]}` : model) : '';
+  // "W166 (2011–2015)" → "W166", and with years (for a listing's fitment) "W166 2011–2015".
+  const generationName = generation && generation !== ALL_GENERATIONS ? (withYears ? generation.replace(/[()]/g, '') : generation.split(' (')[0]) : '';
+  const modelName = model ? (generationName ? `${model} ${generationName}` : model) : '';
   const ready = !!make && (models.length === 0 || !!model);
   const item = `${make ?? ''} ${modelName}`.trim();
   const already = picked.some((p) => p === item || p.startsWith(`${item} `));

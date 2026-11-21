@@ -1190,3 +1190,6 @@ create policy ai_feedback_write on public.ai_feedback for insert to authenticate
 revoke execute on function public.dispute_message_limit() from public, anon, authenticated;
 revoke execute on function public.listing_vat_guard() from public, anon, authenticated;
 grant execute on function public.has_thread_on(uuid) to anon, authenticated;
+
+-- 27. Other codes on the part (supplier, casting, catalogue codes), comma-separated: buyers search by them too.
+alter table public.listings add column if not exists alt_codes text not null default '' check (char_length(alt_codes) <= 300);

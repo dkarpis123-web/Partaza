@@ -77,6 +77,8 @@ export interface Listing {
   /** Defects confirmed by the seller. Empty array = no defects declared. */
   defects: string[];
   oem: string;
+  /** Other codes on the part (supplier, casting, catalogue codes), comma-separated. Searched like the part number. */
+  altCodes?: string;
   fits: string;
   vehicleType: VehicleType;
   city: string;

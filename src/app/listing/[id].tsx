@@ -261,7 +261,7 @@ export default function ListingScreen() {
             {fitRows.map((row, i) => (
               <View key={`${row.name}-${i}`} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '500', color: colors.ink, flexShrink: 1 }}>{row.name}</Text>
-                <Text style={{ fontSize: 14, color: colors.muted }}>{yearsText(row)}</Text>
+                <Text style={{ fontSize: 14, color: colors.muted }}>{row.from !== null && row.to === null ? `${tr('nuo')} ${row.from}` : yearsText(row)}</Text>
               </View>
             ))}
           </View>
@@ -269,6 +269,7 @@ export default function ListingScreen() {
           <Row label="Tinka" value={listing.fits} />
         ) : null}
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
+        {listing.altCodes ? <Row label="Kiti kodai" value={listing.altCodes} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />
         {!mine && (listing.shipping !== null || listing.shippingQuote) ? <DestinationPicker /> : null}
