@@ -1231,7 +1231,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const bumpStart: Store['bumpStart'] = async (listingId) => {
       if (!supabase) return { error: 'Bandomojoje versijoje iškėlimas neveikia.' };
       try {
-        const { data, error } = await supabase.functions.invoke('bump', { body: { action: 'start', listing_id: listingId } });
+        const { data, error } = await supabase.functions.invoke('bump', { body: { action: 'start', listing_id: listingId, lang: getLang() } });
         if (error || !data) return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
         if (data.error) return { error: data.error === 'not_configured' ? 'Skelbimų iškėlimas dar neįjungtas.' : data.error === 'listing_not_active' ? 'Iškelti galima tik paskelbtą skelbimą.' : 'Nepavyko atidaryti mokėjimo. Bandykite dar kartą.' };
         return { url: String(data.url) };
@@ -1251,7 +1251,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
 
     const buy: Store['buy'] = async (listingId, delivery, country, extraIds) => {
-      const answer = await pay({ action: 'checkout', listing_id: listingId, delivery, ...(country ? { country } : {}), ...(extraIds && extraIds.length > 0 ? { extra_ids: extraIds } : {}) });
+      const answer = await pay({ action: 'checkout', lang: getLang(), listing_id: listingId, delivery, ...(country ? { country } : {}), ...(extraIds && extraIds.length > 0 ? { extra_ids: extraIds } : {}) });
       if (answer.error) return { error: answer.error };
       return answer.data?.url ? { url: String(answer.data.url) } : { error: PAY_ERRORS.stripe_error };
     };

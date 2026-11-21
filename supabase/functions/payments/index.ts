@@ -7,7 +7,7 @@
 //
 // One function, three kinds of callers:
 // - the app, as a signed-in user:   { action: 'connect_start' | 'connect_status' | 'checkout' | 'sync_order' | 'order_action', ... }
-//   (checkout: listing_id, extra_ids = up to 9 more listings of the same seller sent in the same parcel, delivery, country)
+//   (checkout: listing_id, extra_ids = up to 9 more listings of the same seller sent in the same parcel, delivery, country, lang)
 //   (order_action: do = ship | received | confirm | dispute | dispute_withdraw | dispute_refund | cancel)
 // - Stripe, as a signed webhook:    header "Stripe-Signature" (needs STRIPE_WEBHOOK_SECRET)
 // - the database timer, no rights:  { action: 'release_due' } – takes no input, only releases what is already due
@@ -46,6 +46,16 @@ const SILENT_DAYS = 14;
 /** If the seller never dispatches: days after payment until the buyer may cancel and be refunded. */
 const DISPATCH_DAYS = 7;
 const DISPUTE_KINDS = ['not_received', 'not_as_described', 'damaged', 'no_fit', 'other'];
+/** Words on Stripe's payment page in the buyer's language (Stripe shows its own page in the same language). */
+const WORDS: Record<string, { delivery: string; oneParcel: string; protection: string; admin: string }> = {
+  lt: { delivery: 'Pristatymas', oneParcel: 'Pristatymas (viena siunta)', protection: 'Pirkėjo apsauga', admin: 'Administravimo mokestis' },
+  en: { delivery: 'Delivery', oneParcel: 'Delivery (one parcel)', protection: 'Buyer protection', admin: 'Administration fee' },
+  lv: { delivery: 'Piegāde', oneParcel: 'Piegāde (viens sūtījums)', protection: 'Pircēja aizsardzība', admin: 'Administrēšanas maksa' },
+  et: { delivery: 'Tarne', oneParcel: 'Tarne (üks pakk)', protection: 'Ostjakaitse', admin: 'Haldustasu' },
+  pl: { delivery: 'Dostawa', oneParcel: 'Dostawa (jedna przesyłka)', protection: 'Ochrona kupującego', admin: 'Opłata administracyjna' },
+  ru: { delivery: 'Доставка', oneParcel: 'Доставка (одна посылка)', protection: 'Защита покупателя', admin: 'Административный сбор' },
+  de: { delivery: 'Lieferung', oneParcel: 'Lieferung (ein Paket)', protection: 'Käuferschutz', admin: 'Bearbeitungsgebühr' },
+};
 const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
 
 const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
@@ -511,10 +521,12 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
     return { error: itemsError.code === '23505' ? 'listing_reserved' : 'server_error' };
   }
 
+  const lang = typeof body.lang === 'string' && WORDS[body.lang] ? body.lang : 'lt';
+  const words = WORDS[lang];
   const lines: Json[] = items.map((i) => ({ quantity: 1, price_data: { currency: 'eur', unit_amount: i.cents, product_data: { name: String(i.listing.title).slice(0, 120) } } }));
-  if (shipping > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: shipping, product_data: { name: parts.length > 1 ? 'Pristatymas (viena siunta)' : 'Pristatymas' } } });
-  if (protection > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: protection, product_data: { name: 'Pirkėjo apsauga' } } });
-  if (ADMIN_FEE > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: ADMIN_FEE, product_data: { name: 'Administravimo mokestis' } } });
+  if (shipping > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: shipping, product_data: { name: parts.length > 1 ? words.oneParcel : words.delivery } } });
+  if (protection > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: protection, product_data: { name: words.protection } } });
+  if (ADMIN_FEE > 0) lines.push({ quantity: 1, price_data: { currency: 'eur', unit_amount: ADMIN_FEE, product_data: { name: words.admin } } });
 
   try {
     const session = await stripe(
@@ -522,7 +534,7 @@ async function checkout(admin: SupabaseClient, user: Json, body: Json, site: str
       'checkout/sessions',
       {
         mode: 'payment',
-        locale: 'lt',
+        locale: lang,
         line_items: lines,
         client_reference_id: order.id,
         customer_email: user.email,

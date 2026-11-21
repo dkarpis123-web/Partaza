@@ -52,11 +52,18 @@ async function stripe(method: 'GET' | 'POST', path: string, params?: Record<stri
   return json;
 }
 
+/** "Promotion for 7 days" in the seller's language, for Stripe's payment page. */
+const PROMOTE: Record<string, (days: number) => string> = {
+  lt: (d) => `skelbimo iškėlimas ${d} d.`, en: (d) => `listing promotion, ${d} days`, lv: (d) => `sludinājuma izcelšana, ${d} d.`,
+  et: (d) => `kuulutuse esiletõstmine, ${d} päeva`, pl: (d) => `wyróżnienie ogłoszenia, ${d} dni`, ru: (d) => `продвижение объявления, ${d} дн.`,
+  de: (d) => `Hervorhebung der Anzeige, ${d} Tage`,
+};
+
 /** The fee in cents: 5 % of the price, at least the smallest amount a card payment can be. */
 const feeCents = (price: number) => Math.max(MIN_CENTS, Math.round(price * 100 * RATE));
 
 // deno-lint-ignore no-explicit-any
-async function start(admin: any, userId: string, listingId: string): Promise<Json> {
+async function start(admin: any, userId: string, listingId: string, lang: string): Promise<Json> {
   const { data: listing } = await admin.from('listings').select('id, seller_id, title, price, status').eq('id', listingId).maybeSingle();
   if (!listing || listing.seller_id !== userId) return { error: 'not_yours' };
   if (listing.status !== 'active') return { error: 'listing_not_active' };
@@ -66,7 +73,8 @@ async function start(admin: any, userId: string, listingId: string): Promise<Jso
     'line_items[0][quantity]': '1',
     'line_items[0][price_data][currency]': 'eur',
     'line_items[0][price_data][unit_amount]': String(amount),
-    'line_items[0][price_data][product_data][name]': `Partaza: skelbimo iškėlimas ${DAYS} d. – ${String(listing.title).slice(0, 80)}`,
+    'line_items[0][price_data][product_data][name]': `Partaza: ${(PROMOTE[lang] ?? PROMOTE.lt)(DAYS)} – ${String(listing.title).slice(0, 80)}`,
+    locale: PROMOTE[lang] ? lang : 'lt',
     success_url: `${SITE}/listing/${listingId}?bump=paid`,
     cancel_url: `${SITE}/listing/${listingId}`,
     'metadata[kind]': 'bump',
@@ -117,7 +125,7 @@ Deno.serve(async (req: Request) => {
   }
   if (!isUuid(body.listing_id)) return reply({ error: 'bad_request' });
   try {
-    if (body.action === 'start') return reply(await start(admin, who.user.id, body.listing_id));
+    if (body.action === 'start') return reply(await start(admin, who.user.id, body.listing_id, typeof body.lang === 'string' ? body.lang : 'lt'));
     if (body.action === 'sync') return reply(await sync(admin, who.user.id, body.listing_id));
     return reply({ error: 'bad_request' });
   } catch (error) {

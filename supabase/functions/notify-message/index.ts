@@ -4,6 +4,7 @@
 // Safe by design:
 // - only a signed-in participant of the thread can trigger it;
 // - the e-mail never contains the message text, only the listing title and a link;
+// - it is wholly Lithuanian, or English for a recipient who chose another language in the app;
 // - at most one e-mail per thread and recipient every 30 minutes;
 // - nothing is sent if either person has blocked the other;
 // - does nothing until BREVO_API_KEY or RESEND_API_KEY is set in the project's Edge Function secrets.
@@ -79,24 +80,45 @@ Deno.serve(async (req: Request) => {
   if (!email) return reply({ skipped: 'no_email' });
 
   const { data: listing } = await admin.from('listings').select('title').eq('id', thread.listing_id).maybeSingle();
-  const title = listing?.title ?? 'skelbimą';
+  // Wholly Lithuanian, or English for anyone who chose another language in the app.
+  const english = typeof recipient?.user?.user_metadata?.lang === 'string' && recipient.user.user_metadata.lang !== 'lt';
+  const title = listing?.title ?? (english ? 'your listing' : 'skelbimą');
   const site = Deno.env.get('SITE_URL') ?? 'https://partaza.eu';
   const link = `${site}/chat/${threadId}`;
-  const text = `Sveiki,\n\ngavote naują žinutę apie „${title}“.\n\nPerskaityti ir atsakyti: ${link}\n\nŠis laiškas išsiųstas automatiškai. Apie tą patį pokalbį primename ne dažniau kaip kas ${THROTTLE_MINUTES} minučių.\n\nPartaza`;
+  const words = english
+    ? { subject: `New message about “${title}” – Partaza`, heading: 'You have a new message', body: `Someone wrote to you about “${title}” on Partaza.`, button: 'Read and reply', note: `This e-mail was sent automatically. For the same conversation we remind you at most once every ${THROTTLE_MINUTES} minutes.`, footer: 'Partaza – marketplace for new and used vehicle parts · MB „Sintela“, company code 304127980, Brastos g. 7/4, Kaunas, Lithuania', hello: 'Hello,' }
+    : { subject: `Nauja žinutė apie „${title}“ – Partaza`, heading: 'Gavote naują žinutę', body: `Jums parašė dėl „${title}“ „Partaza“ platformoje.`, button: 'Skaityti ir atsakyti', note: `Šis laiškas išsiųstas automatiškai. Apie tą patį pokalbį primename ne dažniau kaip kas ${THROTTLE_MINUTES} minučių.`, footer: 'Partaza – naujų ir naudotų transporto dalių rinka · MB „Sintela“, į. k. 304127980, Brastos g. 7/4, Kaunas, Lietuva', hello: 'Sveiki,' };
+  const text = `${words.hello}\n\n${words.body}\n\n${words.button}: ${link}\n\n${words.note}\n\n${words.footer}`;
+  const escape = (value: string) => value.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+<body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,Helvetica,sans-serif;color:#15181C;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:14px;border:1px solid #DDE1E6;">
+<tr><td style="padding:24px 28px 8px 28px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td><img src="${site}/logo192.png" width="40" height="40" alt="Partaza" style="display:block;border-radius:10px;"></td>
+<td style="padding-left:10px;font-size:22px;font-weight:bold;">Partaza</td></tr></table></td></tr>
+<tr><td style="padding:16px 28px 0 28px;">
+<h1 style="margin:0 0 12px 0;font-size:20px;line-height:1.3;">${escape(words.heading)}</h1>
+<p style="margin:0 0 20px 0;font-size:15px;line-height:1.5;">${escape(words.body)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:#C2410C;">
+<a href="${link}" style="display:inline-block;padding:13px 22px;font-size:16px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:10px;">${escape(words.button)}</a></td></tr></table>
+<p style="margin:16px 0 0 0;font-size:13px;line-height:1.5;color:#5B6470;">${escape(words.note)}</p></td></tr>
+<tr><td style="padding:24px 28px;font-size:12px;line-height:1.5;color:#5B6470;">${escape(words.footer)}</td></tr>
+</table></td></tr></table></body></html>`;
 
   const fromName = Deno.env.get('MAIL_FROM_NAME') ?? 'Partaza';
   const fromEmail = Deno.env.get('MAIL_FROM_EMAIL') ?? 'pranesimai@partaza.eu';
-  const subject = `Nauja žinutė apie „${title}“`;
+  const subject = words.subject;
   const sent = brevoKey
     ? await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ sender: { name: fromName, email: fromEmail }, to: [{ email }], subject, textContent: text }),
+        body: JSON.stringify({ sender: { name: fromName, email: fromEmail }, to: [{ email }], subject, textContent: text, htmlContent: html }),
       })
     : await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [email], subject, text }),
+        body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [email], subject, text, html }),
       });
   if (!sent.ok) return reply({ error: 'mail_failed', status: sent.status }, 502);
 
