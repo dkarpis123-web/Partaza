@@ -6,7 +6,7 @@ import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
-import { fitsCar } from '@/services/vin';
+import { fitVerdict, parseFitment, yearsText } from '@/services/fitment';
 import { CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, useDestination, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -87,6 +87,9 @@ export default function ListingScreen() {
   };
 
   const status = listing.status ?? 'active';
+  const verdict = myCar ? fitVerdict(listing, myCar) : 'no';
+  const carName = myCar ? `${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}${myCar.year ? ` ${myCar.year}` : ''}` : '';
+  const fitRows = parseFitment(listing.fits);
   const editable = status === 'active' || status === 'pending' || status === 'rejected';
   // The price the buyer would pay: an offer the seller (or the buyer) already accepted, otherwise the asking price.
   const myThread = threadForListing(listing.id);
@@ -229,15 +232,18 @@ export default function ListingScreen() {
       </Text>
 
       {!mine && myCar && !listing.wholeVehicle ? (
-        fitsCar(`${listing.fits} ${listing.title}`, myCar.make, myCar.model) ? (
+        verdict === 'fits' ? (
           <View style={{ padding: 12, borderRadius: 12, backgroundColor: '#ECFDF3', borderWidth: 1, borderColor: '#15803D' }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#15803D' }}>{`✓ ${tr('Tinka jūsų automobiliui')}: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}${myCar.year ? ` ${myCar.year}` : ''}`}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#15803D' }}>{`✓ ${tr('Tinka jūsų automobiliui')}: ${carName}`}</Text>
             <Text style={{ fontSize: 12, color: '#166534' }}>Pagal skelbimo tekstą. Prieš pirkdami sutikrinkite dalies numerį.</Text>
           </View>
+        ) : verdict === 'year' ? (
+          <Notice tone="warn">{`${tr('Skelbime nurodyti kiti gamybos metai nei jūsų automobilio')}: ${carName}. ${tr('Prieš pirkdami sutikrinkite dalies numerį.')}`}</Notice>
         ) : (
-          <Muted>{`${tr('Nepatvirtinta, kad tinka jūsų automobiliui')}: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}. ${tr('Prieš pirkdami sutikrinkite dalies numerį.')}`}</Muted>
+          <Muted>{`${tr('Nepatvirtinta, kad tinka jūsų automobiliui')}: ${carName}. ${tr('Prieš pirkdami sutikrinkite dalies numerį.')}`}</Muted>
         )
       ) : null}
+
       {hasDefects ? (
         <Notice tone="warn">Pardavėjo nurodyti pažeidimai: {listing.defects.join('; ')}.</Notice>
       ) : (
@@ -249,7 +255,19 @@ export default function ListingScreen() {
         <Row label="Būklė" value={CONDITION_LABELS[listing.condition]} />
         <Row label="Transportas" value={`${VEHICLE_LABELS[listing.vehicleType]}${listing.classic ? ' · senovinis' : ''}${listing.motorsport ? ' · automotosportas' : ''}`} />
         {listing.wholeVehicle ? <Row label="Parduodama" value="Visas automobilis dalims" /> : null}
-        {listing.fits ? <Row label="Tinka" value={listing.fits} /> : null}
+        {fitRows.length > 1 ? (
+          <View style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line, gap: 4 }}>
+            <Text style={{ fontSize: 14, color: colors.muted }}>{`${tr('Tinka')} (${fitRows.length})`}</Text>
+            {fitRows.map((row, i) => (
+              <View key={`${row.name}-${i}`} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: '500', color: colors.ink, flexShrink: 1 }}>{row.name}</Text>
+                <Text style={{ fontSize: 14, color: colors.muted }}>{yearsText(row)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : listing.fits ? (
+          <Row label="Tinka" value={listing.fits} />
+        ) : null}
         {listing.oem ? <Row label="OEM numeris" value={listing.oem} /> : null}
         <Row label="Vieta" value={`${listing.city}, ${countryLabel(listing.country)}`} />
         <Row label="Gavimas" value={listing.shipping === null ? deliveryText(listing) : `${deliveryText(listing)}${listing.pickup ? ' arba atsiėmimas' : ''}`} />

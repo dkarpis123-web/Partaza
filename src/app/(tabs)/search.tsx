@@ -8,7 +8,8 @@ import { DestinationPicker } from '@/components/DestinationPicker';
 import { FilterBar } from '@/components/FilterBar';
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
-import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
+import { fitVerdict } from '@/services/fitment';
+import { modelSearchTerm, readVin } from '@/services/vin';
 import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
 import { shippingTo } from '@/services/shipping';
 import { tr, useLang } from '@/i18n';
@@ -156,7 +157,7 @@ export default function SearchScreen() {
       if (onlyClassic && !l.classic) return false;
       if (onlyMotorsport && !l.motorsport) return false;
       if (onlyWhole && !l.wholeVehicle) return false;
-      if (onlyMyCar && myCar && !fitsCar(`${l.fits} ${l.title}`, myCar.make, myCar.model)) return false;
+      if (onlyMyCar && myCar && fitVerdict(l, myCar) !== 'fits') return false;
       if ((l.status ?? 'active') !== 'active') return false;
       const deliverable = l.shipping !== null;
       if (!((delivery && deliverable) || (pickup && l.pickup))) return false;

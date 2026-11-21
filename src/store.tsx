@@ -114,6 +114,8 @@ interface Store extends State {
   setKind: (kind: SellerKind) => Result;
   /** Sets the seller's own photo or logo from a picked image; null removes it. */
   setLogo: (uri: string | null) => Result;
+  /** Holiday mode on or off: while on, buyers do not see this seller's listings. */
+  setAway: (away: boolean) => Result;
   addListing: (draft: ListingDraft) => Promise<{ id?: string; error?: string }>;
   updateListing: (listingId: string, draft: ListingDraft) => Result;
   addDonor: (name: string, vin: string, cost: number) => Promise<{ id?: string; error?: string }>;
@@ -195,7 +197,7 @@ type Row = Record<string, any>;
 
 function toUser(row: Row): User {
   const year = row.created_at ? new Date(row.created_at).getFullYear() : '';
-  return { id: row.id, name: row.name, kind: row.kind === 'business' ? 'business' : 'private', rating: 0, reviews: 0, since: year ? `${year} m.` : '', logo: row.logo_url ?? null };
+  return { id: row.id, name: row.name, kind: row.kind === 'business' ? 'business' : 'private', rating: 0, reviews: 0, since: year ? `${year} m.` : '', logo: row.logo_url ?? null, away: !!row.away };
 }
 
 function toReview(row: Row): Review {
@@ -928,6 +930,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
+    const setAway: Store['setAway'] = async (away) => {
+      const { me } = stateRef.current;
+      if (supabase) {
+        const { error } = await supabase.from('profiles').update({ away }).eq('id', me.id);
+        if (error) return explain(error);
+      }
+      setState((s) => ({ ...s, me: { ...s.me, away }, users: s.users.map((u) => (u.id === s.me.id ? { ...u, away } : u)) }));
+      return null;
+    };
+
     const setLogo: Store['setLogo'] = async (uri) => {
       const { me } = stateRef.current;
       let logo = uri;
@@ -1185,7 +1197,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

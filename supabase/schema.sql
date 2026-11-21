@@ -1099,3 +1099,18 @@ begin
   end if;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Holiday mode: while a seller is away, buyers do not see their listings.
+-- ---------------------------------------------------------------------------
+alter table public.profiles add column if not exists away boolean not null default false;
+
+create or replace function public.seller_away(p_seller uuid) returns boolean
+language sql stable set search_path = '' as $$
+  select coalesce((select p.away from public.profiles p where p.id = p_seller), false);
+$$;
+grant execute on function public.seller_away(uuid) to anon, authenticated;
+
+drop policy if exists listings_read on public.listings;
+create policy listings_read on public.listings for select
+  using ((status = 'active' and not public.seller_away(seller_id)) or seller_id = (select auth.uid()) or public.has_thread_on(id));

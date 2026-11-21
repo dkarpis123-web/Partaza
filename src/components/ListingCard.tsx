@@ -1,4 +1,4 @@
-import { fitsCar } from '@/services/vin';
+import { fitVerdict } from '@/services/fitment';
 import { Link } from 'expo-router';
 import React from 'react';
 import { Image, Pressable, View } from 'react-native';
@@ -31,7 +31,7 @@ export function deliveryText(listing: Listing): string {
 export function ListingCard({ listing }: { listing: Listing }) {
   useLang();
   const { userById, myCar } = useStore();
-  const fitsMine = !!myCar && fitsCar(`${listing.fits} ${listing.title}`, myCar.make, myCar.model);
+  const fitsMine = !!myCar && fitVerdict(listing, myCar) === 'fits';
   const seller = userById(listing.sellerId);
   const hasDefects = listing.defects.length > 0;
   return (

@@ -38,6 +38,8 @@ export interface User {
   since: string;
   /** The seller's own photo or logo. */
   logo?: string | null;
+  /** Holiday mode: the seller's listings are hidden from buyers until it is switched off. */
+  away?: boolean;
 }
 
 /** A rating one side of a completed order gave the other. Public. */

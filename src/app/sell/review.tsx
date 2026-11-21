@@ -216,12 +216,31 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   if (!donor && costText.trim() && parsePrice(costText) === null) found.cost = 'Pirkimo kainą įrašykite skaičiumi, pvz., 20.';
   const problems = Object.values(found);
   const shown = tried ? found : {};
+  // The form is filled in three short steps instead of one long page.
+  const STEPS = ['Dalis', 'Kaina', 'Siuntimas'];
+  const STEP_OF: Record<string, number> = { title: 0, price: 1, cost: 1, ship: 2, abroad: 2, city: 2 };
+  const [step, setStep] = useState(0);
+  const stepProblems = Object.keys(found).filter((k) => STEP_OF[k] === step).map((k) => found[k]);
+  const goTo = (target: number) => {
+    setTried(false);
+    setError('');
+    setStep(target);
+  };
+  const next = () => {
+    if (stepProblems.length > 0) return setTried(true);
+    goTo(step + 1);
+  };
 
   const publish = async () => {
     if (publishing) return;
     setTried(true);
     setError('');
-    if (problems.length > 0) return;
+    if (problems.length > 0) {
+      // Open the first step that still has something to fix.
+      const first = Math.min(...Object.keys(found).map((k) => STEP_OF[k]));
+      if (first !== step) setStep(first);
+      return;
+    }
     const shipping = shipMode === 'price' ? parsePrice(shipText) : null;
     const shippingAbroad = shipMode === 'price' && abroadText.trim() ? parsePrice(abroadText) : null;
     const shippingQuote = shipMode === 'quote';
@@ -266,21 +285,44 @@ function ReviewForm({ editing }: { editing?: Listing }) {
 
   return (
     <Page
+      key={step}
       footer={
         <View style={{ gap: 8 }}>
-          {tried && problems.length > 0 ? (
+          {tried && stepProblems.length > 0 ? (
             <View accessibilityRole="alert" style={{ gap: 4, padding: 10, borderRadius: 10, borderWidth: 2, borderColor: '#B42318', backgroundColor: '#FEF3F2' }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#B42318' }}>{editing ? 'Kad išsaugotume, pataisykite:' : 'Kad paskelbtume, pataisykite:'}</Text>
-              {problems.map((p) => (
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#B42318' }}>{step < 2 ? 'Kad tęstume, pataisykite:' : editing ? 'Kad išsaugotume, pataisykite:' : 'Kad paskelbtume, pataisykite:'}</Text>
+              {stepProblems.map((p) => (
                 <Text key={p} style={{ fontSize: 14, color: '#7A271A' }}>{`• ${tr(p)}`}</Text>
               ))}
               <Text style={{ fontSize: 12, color: '#7A271A' }}>Šie laukai formoje pažymėti raudonai.</Text>
             </View>
           ) : null}
           {error ? <Notice tone="warn">{error}</Notice> : null}
-          <Button label={publishing ? 'Saugoma…' : editing ? 'Išsaugoti pakeitimus' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {step > 0 ? <Button label="Atgal" kind="outline" disabled={publishing} onPress={() => goTo(step - 1)} style={{ flex: 1 }} /> : null}
+            {step < 2 ? (
+              <Button label={`${tr('Toliau')}: ${tr(STEPS[step + 1])}`} onPress={next} style={{ flex: 2 }} />
+            ) : (
+              <Button label={publishing ? 'Saugoma…' : editing ? 'Išsaugoti pakeitimus' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} style={{ flex: 2 }} />
+            )}
+          </View>
         </View>
       }>
+      <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 6 }}>
+        {STEPS.map((name, i) => (
+          <Pressable
+            key={name}
+            accessibilityRole="tab"
+            accessibilityLabel={`${i + 1}. ${tr(name)}`}
+            accessibilityState={{ selected: step === i }}
+            onPress={() => goTo(i)}
+            style={{ flex: 1, minHeight: 44, paddingHorizontal: 6, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: step === i ? colors.ink : colors.surface, borderWidth: 1, borderColor: step === i ? colors.ink : colors.border }}>
+            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: step === i ? '#FFFFFF' : i < step ? colors.ink : colors.muted }}>{`${i + 1}. ${tr(name)}`}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {step === 0 ? (
+        <>
       {isDemo ? (
         <Notice tone="warn">Bandomoji versija: dalies atpažinimas dar neprijungtas, todėl laukai užpildyti pavyzdžiu. Pataisykite juos pagal savo dalį.</Notice>
       ) : aiNote && aiNote !== 'ok' ? (
@@ -401,6 +443,10 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         <Text style={{ fontSize: 13, lineHeight: 19, color: colors.warn }}>Pažymėti pažeidimai bus aiškiai rodomi pirkėjui. Taip išvengsite ginčų ir grąžinimų.</Text>
       </Card>
 
+        </>
+      ) : null}
+
+      {step === 1 ? (
       <Card>
         <Heading>Kaina</Heading>
         {advice ? (
@@ -457,6 +503,15 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           <Notice tone="warn">Kainą su PVM gali nurodyti tik pardavėjas, patvirtinęs PVM mokėtojo kodą profilyje.</Notice>
         ) : null}
         {vatHint && !vatCode ? <Button label="Įrašyti PVM kodą profilyje" kind="outline" onPress={() => router.push('/profile')} /> : null}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Chip label="Leisti siūlyti kainą" selected={allowOffers} onPress={() => setAllowOffers((v) => !v)} />
+        </View>
+      </Card>
+      ) : null}
+
+      {step === 2 ? (
+      <Card>
+        <Heading>Siuntimas ir vieta</Heading>
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Siuntimas (pristatymą moka pirkėjas)</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Nurodau siuntimo kainą" selected={shipMode === 'price'} onPress={() => setShipMode('price')} />
@@ -499,10 +554,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           </>
         ) : null}
         <Field label="Miestas" value={city} onChangeText={setCity} placeholder="Pvz., Kaunas" error={shown.city} />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Chip label="Leisti siūlyti kainą" selected={allowOffers} onPress={() => setAllowOffers((v) => !v)} />
-        </View>
       </Card>
+      ) : null}
 
       {publishing ? <Notice>Keliamos nuotraukos ir saugomas skelbimas. Tai gali užtrukti iki minutės – neuždarykite lango.</Notice> : null}
     </Page>

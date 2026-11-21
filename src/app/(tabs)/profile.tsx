@@ -20,7 +20,7 @@ import { Text } from '@/components/Text';
 export default function ProfileScreen() {
   const router = useRouter();
   useLang();
-  const { me, registered, listings, live, phone, setPhone, setKind, setLogo, signOut, deleteAccount, reducePrice, favorites, following, orders, paidOrders, payReady, userById } = useStore();
+  const { me, registered, listings, live, phone, setPhone, setKind, setLogo, setAway, signOut, deleteAccount, reducePrice, favorites, following, orders, paidOrders, payReady, userById } = useStore();
   const openOrders = orders.filter((o) => o.status === 'agreed' || o.status === 'handed').length;
   const saved = listings.filter((l) => favorites.includes(l.id) && (l.status ?? 'active') === 'active');
   const [now] = useState(() => Date.now());
@@ -67,6 +67,16 @@ export default function ProfileScreen() {
           {me.logo ? <Chip label="Pašalinti nuotrauką" selected={false} onPress={async () => show(await setLogo(null))} /> : null}
         </View>
         <Muted>Nuotrauką ar logotipą pirkėjai mato jūsų skelbimuose.</Muted>
+        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Atostogų režimas</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Chip label="Prekiauju" selected={!me.away} onPress={async () => show(await setAway(false))} />
+          <Chip label="Atostogauju – paslėpti skelbimus" selected={!!me.away} onPress={async () => show(await setAway(true))} />
+        </View>
+        {me.away ? (
+          <Notice tone="warn">Atostogų režimas įjungtas: pirkėjai jūsų skelbimų nemato ir negali jų pirkti. Grįžę pasirinkite „Prekiauju“.</Notice>
+        ) : (
+          <Muted>Išvykstant skelbimus galima laikinai paslėpti – jie neištrinami ir grįžus vėl rodomi.</Muted>
+        )}
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Pardavėjo statusas</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Privatus asmuo" selected={me.kind === 'private'} onPress={async () => show(await setKind('private'))} />
