@@ -6,6 +6,7 @@ import { Photo, deliveryText } from '@/components/ListingCard';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { SellerLogo } from '@/components/SellerLogo';
 import { Button, Card, DefectBadge, Field, Muted, Notice, Page, Row } from '@/components/ui';
+import { fitsCar } from '@/services/vin';
 import { CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, useDestination, useGeo } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
@@ -22,7 +23,7 @@ export default function ListingScreen() {
   const { place } = useGeo();
   const dest = useDestination().country;
   const router = useRouter();
-  const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, checkListing, blockUser, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
+  const { listingById, userById, me, registered, live, ready, openThread, sendText, report, markSold, updatePhotos, checkListing, blockUser, myCar, favorites, toggleFavorite, threadForListing, createOrder, orders, payReady } = useStore();
   const [buying, setBuying] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
@@ -227,6 +228,16 @@ export default function ListingScreen() {
         <Text style={{ fontSize: 14, fontWeight: '600', color: colors.muted }}>{listing.vat ? 'su PVM' : 'be PVM'}</Text>
       </Text>
 
+      {!mine && myCar && !listing.wholeVehicle ? (
+        fitsCar(`${listing.fits} ${listing.title}`, myCar.make, myCar.model) ? (
+          <View style={{ padding: 12, borderRadius: 12, backgroundColor: '#ECFDF3', borderWidth: 1, borderColor: '#15803D' }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#15803D' }}>{`✓ ${tr('Tinka jūsų automobiliui')}: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}${myCar.year ? ` ${myCar.year}` : ''}`}</Text>
+            <Text style={{ fontSize: 12, color: '#166534' }}>Pagal skelbimo tekstą. Prieš pirkdami sutikrinkite dalies numerį.</Text>
+          </View>
+        ) : (
+          <Muted>{`${tr('Nepatvirtinta, kad tinka jūsų automobiliui')}: ${myCar.make}${myCar.model ? ` ${myCar.model}` : ''}. ${tr('Prieš pirkdami sutikrinkite dalies numerį.')}`}</Muted>
+        )
+      ) : null}
       {hasDefects ? (
         <Notice tone="warn">Pardavėjo nurodyti pažeidimai: {listing.defects.join('; ')}.</Notice>
       ) : (

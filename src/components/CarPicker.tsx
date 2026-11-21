@@ -22,7 +22,7 @@ function listFor(type: VehicleType): Record<string, string[]> | null {
 const ALL_GENERATIONS = 'Visos kartos';
 
 /** One drop-down: a row showing the current choice; tapped, it opens a list (with a search box when the list is long). */
-function Dropdown({ label, value, options, open, onToggle, onSelect, disabled }: {
+export function Dropdown({ label, value, options, open, onToggle, onSelect, disabled }: {
   label: string; value: string | null; options: string[]; open: boolean; onToggle: () => void; onSelect: (option: string) => void; disabled?: boolean;
 }) {
   const [filter, setFilter] = useState('');

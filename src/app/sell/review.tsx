@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
 
-import { CarPicker } from '@/components/CarPicker';
+import { CarPicker, Dropdown } from '@/components/CarPicker';
 import { type Marks, remapMarks } from '@/components/MarkedPhoto';
 import { PhotoEditor } from '@/components/PhotoEditor';
 import { PriceOptions } from '@/components/PriceOptions';
@@ -14,7 +14,6 @@ import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
 import { colors, money } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
-import { VEHICLE_ICONS } from '@/components/VehicleIcon';
 import { Text } from '@/components/Text';
 
 const TYPES = Object.keys(VEHICLE_LABELS) as VehicleType[];
@@ -207,6 +206,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
 
   // Everything that stops the listing from being published, each tied to its field. Shown after the first try.
   const [tried, setTried] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
   const found: Record<string, string> = {};
   if (!title.trim()) found.title = 'Įrašykite pavadinimą.';
   if (price === null) found.price = priceText.trim() ? 'Kainą įrašykite skaičiumi, pvz., 85 arba 85,50.' : 'Įrašykite kainą, pvz., 85 arba 85,50.';
@@ -357,12 +357,14 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           style={{ minHeight: 110 }}
           placeholder={whole ? 'Kas veikia, kas pažeista, ko trūksta, rida, variklis…' : 'Rida, iš kokio automobilio išimta, kas dar svarbu pirkėjui…'}
         />
-        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Transportas</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {TYPES.map((t) => (
-            <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={vehicleType === t} onPress={() => setVehicleType(t)} />
-          ))}
-        </ScrollView>
+        <Dropdown
+          label="Transportas"
+          value={tr(VEHICLE_LABELS[vehicleType])}
+          options={TYPES.map((t) => tr(VEHICLE_LABELS[t]))}
+          open={typeOpen}
+          onToggle={() => setTypeOpen((v) => !v)}
+          onSelect={(name) => { setVehicleType(TYPES.find((t) => tr(VEHICLE_LABELS[t]) === name) ?? 'car'); setTypeOpen(false); }}
+        />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip icon="car-convertible" label="Senovinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
           <Chip icon="flag-checkered" label="Automotosporto dalis" selected={motorsport} onPress={() => setMotorsport((v) => !v)} />

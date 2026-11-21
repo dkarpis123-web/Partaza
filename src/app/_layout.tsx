@@ -18,7 +18,7 @@ const TITLES: Record<string, string> = {
   'listing/[id]': 'Skelbimas',
   'offer/[id]': 'Siūlyti kainą',
   'chat/[id]': 'Pokalbis',
-  'sell/review': 'Patikrinkite skelbimą',
+  'sell/review': 'Jūsų skelbimas',
   'register': 'Registracija',
   'dashboard': 'Mano prekyba',
   'buy/[id]': 'Pirkimas',

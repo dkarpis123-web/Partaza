@@ -1,9 +1,10 @@
+import { fitsCar } from '@/services/vin';
 import { Link } from 'expo-router';
 import React from 'react';
 import { Image, Pressable, View } from 'react-native';
 
 import { DefectBadge } from '@/components/ui';
-import { useLang } from '@/i18n';
+import { tr, useLang } from '@/i18n';
 import { countryName, flagOf } from '@/services/geo';
 import { useStore } from '@/store';
 import { colors, money, radius } from '@/theme';
@@ -29,7 +30,8 @@ export function deliveryText(listing: Listing): string {
 
 export function ListingCard({ listing }: { listing: Listing }) {
   useLang();
-  const { userById } = useStore();
+  const { userById, myCar } = useStore();
+  const fitsMine = !!myCar && fitsCar(`${listing.fits} ${listing.title}`, myCar.make, myCar.model);
   const seller = userById(listing.sellerId);
   const hasDefects = listing.defects.length > 0;
   return (
@@ -60,6 +62,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
             {seller.kind === 'business' ? 'Verslas' : 'Privatus'}{seller.reviews > 0 ? ` · ${seller.rating.toFixed(1).replace('.', ',')}` : ''}
           </Text>
           <Text style={{ fontSize: 12, color: colors.muted }}>{deliveryText(listing)}</Text>
+          {fitsMine ? <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803D' }}>{`✓ ${tr('Tinka jūsų automobiliui')}`}</Text> : null}
         </View>
       </Pressable>
     </Link>

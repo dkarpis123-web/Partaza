@@ -5,6 +5,7 @@ import { Platform, ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { CarPicker } from '@/components/CarPicker';
 import { DestinationPicker } from '@/components/DestinationPicker';
+import { FilterBar } from '@/components/FilterBar';
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Card, Chip, Field, Muted, Notice, Page } from '@/components/ui';
 import { fitsCar, modelSearchTerm, readVin } from '@/services/vin';
@@ -15,7 +16,6 @@ import { newMatches, normalize } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
-import { VEHICLE_ICONS } from '@/components/VehicleIcon';
 import { Text, TextInput } from '@/components/Text';
 
 type Sort = 'cheapest' | 'newest' | 'place';
@@ -50,7 +50,6 @@ export default function SearchScreen() {
   const [delivery, setDelivery] = useState(true);
   const [pickup, setPickup] = useState(true);
   const [sort, setSort] = useState<Sort>('cheapest');
-  const [showFilters, setShowFilters] = useState(false);
   const [onlyMyCar, setOnlyMyCar] = useState(false);
   const [editCar, setEditCar] = useState(false);
   const [vinText, setVinText] = useState('');
@@ -292,38 +291,31 @@ export default function SearchScreen() {
         ) : home && country === home ? (
           <Muted>Šalis parinkta pagal jūsų vietą.</Muted>
         ) : null}
-      </Card>
-      <Card>
+        <View style={{ height: 1, backgroundColor: colors.border }} />
         <DestinationPicker />
       </Card>
+      <FilterBar
+        filters={[
+          { key: 'sort', label: 'Rikiuoti', value: sort, options: (Object.keys(SORT_LABELS) as Sort[]).map((v) => ({ value: v, label: SORT_LABELS[v] })), onSelect: (v) => setSort(v as Sort) },
+          {
+            key: 'type', label: 'Transportas', value: type ?? 'all', active: type !== null,
+            options: [{ value: 'all', label: 'Visi' }, ...TYPES.map((t) => ({ value: t as string, label: VEHICLE_LABELS[t] }))],
+            onSelect: (v) => setType(v === 'all' ? null : (v as VehicleType)),
+          },
+          {
+            key: 'get', label: 'Gavimas', value: delivery ? 'delivery' : pickup ? 'pickup' : 'any', active: delivery || pickup,
+            options: [{ value: 'any', label: 'Bet koks' }, { value: 'delivery', label: 'Pristatymas' }, { value: 'pickup', label: 'Atsiėmimas vietoje' }],
+            onSelect: (v) => { setDelivery(v === 'delivery'); setPickup(v === 'pickup'); },
+          },
+        ]}
+      />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Chip label={showFilters ? 'Slėpti filtrus' : 'Gavimas ir rikiavimas'} selected={showFilters} onPress={() => setShowFilters((v) => !v)} />
+        <Chip label="Tik be defektų" selected={onlyNoDefects} onPress={() => setOnlyNoDefects((v) => !v)} />
         <Chip icon="car-convertible" label="Senoviniai automobiliai" selected={onlyClassic} onPress={() => setOnlyClassic((v) => !v)} />
         <Chip icon="flag-checkered" label="Automotosportas" selected={onlyMotorsport} onPress={() => setOnlyMotorsport((v) => !v)} />
         <Chip label="Visas automobilis" selected={onlyWhole} onPress={() => setOnlyWhole((v) => !v)} />
-        <Chip icon="view-grid-outline" label="Visi" selected={type === null} onPress={() => setType(null)} />
-        {TYPES.map((t) => (
-          <Chip key={t} icon={VEHICLE_ICONS[t]} label={VEHICLE_LABELS[t]} selected={type === t} onPress={() => setType(t)} />
-        ))}
       </ScrollView>
-
-      {showFilters ? (
-        <Card>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Kaip gausite dalį</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Chip label="Pristatymas" selected={delivery} onPress={() => setDelivery((v) => !v)} />
-            <Chip label="Atsiėmimas vietoje" selected={pickup} onPress={() => setPickup((v) => !v)} />
-            <Chip label="Tik be defektų" selected={onlyNoDefects} onPress={() => setOnlyNoDefects((v) => !v)} />
-          </View>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>Rikiuoti</Text>
-          <Muted>{dest ? `${tr('Kaina su siuntimu skaičiuojama pristatymui į')}: ${countryLabel(dest)}. ${tr('Skelbimams be siuntimo kainos į šią šalį rodoma tik dalies kaina.')}` : tr('Kad rikiuotume kartu su siuntimo kaina, nurodykite gavėjo šalį arba leiskite naudoti vietą. Dabar rikiuojama tik pagal dalies kainą.')}</Muted>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {(Object.keys(SORT_LABELS) as Sort[]).map((s) => (
-              <Chip key={s} label={SORT_LABELS[s]} selected={sort === s} onPress={() => setSort(s)} />
-            ))}
-          </View>
-        </Card>
-      ) : null}
+      {sort === 'cheapest' && !dest ? <Muted>Kad rikiuotume kartu su siuntimo kaina, nurodykite gavėjo šalį arba leiskite naudoti vietą. Dabar rikiuojama tik pagal dalies kainą.</Muted> : null}
 
       {savedSearches.length > 0 ? (
         <Card>
