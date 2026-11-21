@@ -12,7 +12,7 @@ import { priceAdviceFromMarket, recognizePart, type Recognition, type WebPrices 
 import { COUNTRIES, CUSTOMS_NOTE, countryLabel, countryName, crossesEuBorder, detectCountry, useGeo } from '@/services/geo';
 import { tr, useLang } from '@/i18n';
 import { useStore } from '@/store';
-import { colors, money } from '@/theme';
+import { colors, money, radius } from '@/theme';
 import { CONDITION_LABELS, Condition, Listing, VEHICLE_LABELS, VehicleType } from '@/types';
 import { Text } from '@/components/Text';
 
@@ -86,6 +86,8 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const [title, setTitle] = useState(editing?.title ?? (whole && donor ? `${donor.name}, visas dalims` : ''));
   const [oem, setOem] = useState(editing?.oem ?? '');
   const [altCodes, setAltCodes] = useState(editing?.altCodes ?? '');
+  // Numbers filled in by the AI must be checked by the seller; 'unsure' when the AI itself doubted a character.
+  const [aiCodes, setAiCodes] = useState<'no' | 'read' | 'unsure'>('no');
   const [fits, setFits] = useState(editing?.fits ?? (whole && donor ? donor.name : ''));
   const [vehicleType, setVehicleType] = useState<VehicleType>(editing?.vehicleType ?? 'car');
   const [condition, setCondition] = useState<Condition>(editing?.condition ?? 'used');
@@ -140,6 +142,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
     if (!proposal) return;
     setTitle(proposal.title);
     if (proposal.oem) setOem(proposal.oem);
+    if (proposal.oem || proposal.codes?.length) setAiCodes(proposal.numberUnsure ? 'unsure' : 'read');
     if (proposal.codes?.length) setAltCodes(proposal.codes.join(', '));
     if (proposal.fits) setFits(proposal.fits);
     setVehicleType(proposal.vehicleType);
@@ -175,6 +178,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       setTitle(r.title);
       setOem(r.oem);
       setAltCodes((r.codes ?? []).join(', '));
+      if (!r.isDemo && (r.oem || r.codes?.length)) setAiCodes(r.numberUnsure ? 'unsure' : 'read');
       setFits(r.fits);
       setVehicleType(r.vehicleType);
       setDefects(r.suggestedDefects);
@@ -400,6 +404,15 @@ function ReviewForm({ editing }: { editing?: Listing }) {
 
       <Card>
         <Field label="Pavadinimas" value={title} onChangeText={setTitle} error={shown.title} />
+        {aiCodes !== 'no' ? (
+          <View style={{ backgroundColor: aiCodes === 'unsure' ? '#FDECEA' : '#FFF6E0', borderRadius: radius.md, padding: 10, marginBottom: 8 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.ink }}>
+              {aiCodes === 'unsure'
+                ? 'DI nėra tikras dėl dalies numerio – kai kurie ženklai nuotraukoje neaiškūs. Būtinai palyginkite numerį su etikete.'
+                : 'Numerį ir kodus nuskaitė DI, o jis kartais suklysta. Prieš skelbdami palyginkite juos su etikete ant dalies.'}
+            </Text>
+          </View>
+        ) : null}
         <Field label="Dalies (OEM) numeris" value={oem} onChangeText={setOem} hint="Pagal numerį pirkėjai ras dalį ir matysime panašių dalių kainas." />
         <Field label="Kiti kodai ant dalies (nebūtina)" value={altCodes} onChangeText={(t) => setAltCodes(t.slice(0, 300))} placeholder="Pvz., 006904, 11872702" hint="Visi kiti ant dalies ar etiketės matomi kodai, atskirti kableliais. Nebūtina žinoti, kuris jų pagrindinis – pirkėjai ras dalį pagal bet kurį." />
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />

@@ -1,7 +1,9 @@
 // Partaza AI helpers for sellers, run on Claude:
-//   { action: 'recognize', photos: [public photo URLs], codes: [barcodes / QR codes read on the device], lang }
+//   { action: 'recognize', photos: [public photo URLs], label_photos: [close-ups of the labels], codes: [barcodes / QR codes read on the device], lang }
 //                                                                  → title, part number, other codes on the part, fit, vehicle type, visible damage; the part is named by its number,
 //                                                                    failing that by a barcode / QR code, failing that by its look - and the look is always checked
+//   { action: 'labels', photos: [public photo URLs] }              → where the labels and stamped numbers are on the photos and how they are turned,
+//                                                                    so the app can cut them out upright and large and send them back as label_photos
 //   { action: 'match', photo: public photo URL, lang }               → which listings on the marketplace show the same kind of part
 //   { action: 'improve', listing_id, lang }                        → corrected title, description, part number and fit for the caller's own listing
 //   { action: 'shipping', title, oem, fits, from, to, lang }       → rough parcel weight/size and a postage estimate between two countries, with sources
@@ -239,11 +241,71 @@ async function looksRight(photos: string[], titles: string[], lang: unknown): Pr
   }
 }
 
+/**
+ * Finds the labels and stamped numbers on the photos. Small or upside-down print is misread from the whole
+ * photo, so the app cuts these areas out of the original photo, turns them upright and sends them back enlarged.
+ */
+async function labels(body: Json): Promise<Json> {
+  const photos = (Array.isArray(body.photos) ? body.photos : [])
+    .filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u))
+    .slice(0, 4);
+  if (photos.length === 0) return { error: 'no_photos' };
+  const result = await claude({
+    model: VISION_MODEL,
+    max_tokens: 800,
+    tools: [{
+      name: 'report_labels',
+      description: 'Reports where the labels and stamped or moulded numbers are on the photos.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          labels: {
+            type: 'array',
+            description: 'Areas with a sticker label, a type plate, or numbers stamped or moulded into the part. The ones with part numbers first, at most 3. Empty if there are none.',
+            items: {
+              type: 'object',
+              properties: {
+                photo: { type: 'integer', description: 'Which photo, counting from 1.' },
+                x: { type: 'number', description: 'Left edge of the area as a fraction of the photo width, 0 to 1.' },
+                y: { type: 'number', description: 'Top edge as a fraction of the photo height, 0 to 1.' },
+                w: { type: 'number', description: 'Width as a fraction of the photo width.' },
+                h: { type: 'number', description: 'Height as a fraction of the photo height.' },
+                turn: { type: 'integer', enum: [0, 90, 180, 270], description: 'Degrees the photo must be turned clockwise for this text to read upright, left to right. 180 if the text is upside down.' },
+              },
+              required: ['photo', 'x', 'y', 'w', 'h', 'turn'],
+            },
+          },
+        },
+        required: ['labels'],
+      },
+    }],
+    messages: [{
+      role: 'user',
+      content: [
+        ...photos.map((url: string) => ({ type: 'image', source: { type: 'url', url } })),
+        { type: 'text', text: 'These are photos of a vehicle part. Find every area with printed, stamped or moulded numbers: sticker labels, type plates, numbers in the plastic or metal. For each give its position and how the text is turned - look at the letters themselves to tell whether it is upside down or sideways. Be generous with the area rather than tight. Answer by calling the report_labels tool exactly once (do not answer in plain text).' },
+      ],
+    }],
+  });
+  const found = toolInput(result, 'report_labels');
+  const unit = (n: unknown) => Math.min(1, Math.max(0, Number(n) || 0));
+  return {
+    labels: (Array.isArray(found.labels) ? found.labels : [])
+      .map((l: Json) => ({ photo: Math.round(Number(l.photo)) - 1, x: unit(l.x), y: unit(l.y), w: unit(l.w), h: unit(l.h), turn: [0, 90, 180, 270].includes(Number(l.turn)) ? Number(l.turn) : 0 }))
+      .filter((l: Json) => l.photo >= 0 && l.photo < photos.length && l.w > 0.01 && l.h > 0.01)
+      .slice(0, 3),
+  };
+}
+
 async function recognize(body: Json): Promise<Json> {
   const photos = (Array.isArray(body.photos) ? body.photos : [])
     .filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u))
     .slice(0, 4);
   if (photos.length === 0) return { error: 'no_photos' };
+  // Close-ups of the labels, cut out of the original photos by the app, upright and enlarged.
+  const closeUps = (Array.isArray(body.label_photos) ? body.label_photos : [])
+    .filter((u: unknown) => typeof u === 'string' && PHOTO_URL.test(u))
+    .slice(0, 3);
 
   const result = await claude({
     model: VISION_MODEL,
@@ -255,21 +317,32 @@ async function recognize(body: Json): Promise<Json> {
         type: 'object',
         properties: {
           title: { type: 'string', description: 'Short listing title naming the part, e.g. "Front brake discs, pair". Empty if the photos do not show a vehicle part.' },
-          oem: { type: 'string', description: 'Part / OEM number exactly as readable on the part or its label. Empty if none is clearly readable. Never guess.' },
+          oem: { type: 'string', description: 'Part / OEM number exactly as readable on the part or its label, without a label prefix such as "(P)" or "P/N". Empty if none is readable. Never guess a character.' },
+          oem_sure: { type: 'boolean', description: 'true only if every character of the part number is sharp and unmistakable. false if any character could be another one (1/7, 5/6, 8/3/6, 0/O/D, B/8), the print is small, blurred, worn, dirty, or was read upside down or at an angle.' },
           fits: { type: 'string', description: 'Vehicles the part fits, comma-separated and nothing else (no explanations in brackets): any make or model visible on the part, its label or packaging, or that follows from the part number and the manufacturer\'s numbering scheme. Several candidates are fine. Add production years only when you are sure of them, open-ended ("2020-") for vehicles still produced. Empty only if nothing points to a vehicle.' },
           vehicle_type: { type: 'string', enum: VEHICLE_TYPES },
           defects: { type: 'array', items: { type: 'string' }, description: 'Visible damage or wear, one short phrase each. Empty if none is visible.' },
           codes: { type: 'array', items: { type: 'string' }, description: 'Every other code readable on the part or its labels besides the part number: supplier and manufacturer codes, casting numbers, short catalogue codes, the digits under a barcode or next to a QR code. Exactly as written, one per entry. Leave out dates, serial numbers and lot numbers when they are marked as such. Empty if none.' },
           looks_like: { type: 'string', description: 'What the part is judging ONLY by its shape, size, connectors and mounting points, as if it had no label at all. A short phrase.' },
         },
-        required: ['title', 'oem', 'fits', 'vehicle_type', 'defects', 'codes', 'looks_like'],
+        required: ['title', 'oem', 'oem_sure', 'fits', 'vehicle_type', 'defects', 'codes', 'looks_like'],
       },
     }],
     messages: [{
       role: 'user',
       content: [
         ...photos.map((url: string) => ({ type: 'image', source: { type: 'url', url } })),
-        { type: 'text', text: `These are a seller's photos of one vehicle part for a marketplace listing. Read every number and label you can see, then call the describe_part tool exactly once with the result (do not answer in plain text). Write the title, fits and defects in ${language(body.lang)}. Read the part number exactly as written and never invent one. For the vehicles it fits, use every clue: logos, labels, the numbering scheme and the shape of the part.` },
+        ...closeUps.map((url: string) => ({ type: 'image', source: { type: 'url', url } })),
+        {
+          type: 'text',
+          text:
+            `These are a seller's photos of one vehicle part for a marketplace listing.` +
+            (closeUps.length > 0 ? ` The first ${photos.length} show the part; the last ${closeUps.length} are enlarged close-ups of its labels, turned upright - read the numbers from the close-ups, they are the sharpest view.` : '') +
+            ` Read every number and label you can see, then call the describe_part tool exactly once with the result (do not answer in plain text). Write the title, fits and defects in ${language(body.lang)}. ` +
+            `Labels are often upside down or sideways: work out which way the text runs before reading it. Read the part number one character at a time, exactly as written, and never invent or tidy a character; ` +
+            `if two readings are possible, give the likelier one and set oem_sure to false. On labels a value after "(P)" or "P/N" is the part number; "(1T)", "(S)" and dates are lot and serial data, not the part number. ` +
+            `For the vehicles it fits, use every clue: logos, labels, the numbering scheme and the shape of the part.`,
+        },
       ],
     }],
   });
@@ -299,6 +372,7 @@ async function recognize(body: Json): Promise<Json> {
   return {
     title: best?.title || seen,
     oem: number,
+    number_unsure: !!number && found.oem_sure !== true,
     codes: others,
     fits: best?.fits || byName || text(found.fits, 200),
     by_number: !!best,
@@ -593,12 +667,13 @@ Deno.serve(async (req: Request) => {
   } catch (_) {
     return reply({ error: 'bad_request' });
   }
-  if (!['recognize', 'price', 'match', 'improve', 'shipping'].includes(body.action)) return reply({ error: 'bad_request' });
+  if (!['recognize', 'labels', 'price', 'match', 'improve', 'shipping'].includes(body.action)) return reply({ error: 'bad_request' });
 
   const { data: used } = await admin.rpc('ai_use', { p_user: who.user.id, p_limit: DAILY_LIMIT });
   if (used === false) return reply({ error: 'daily_limit' });
 
   try {
+    if (body.action === 'labels') return reply(await labels(body));
     if (body.action === 'match') return reply(await match(body, admin));
     if (body.action === 'improve') return reply(await improve(body, admin, who.user.id));
     if (body.action === 'shipping') return reply(await shipping(body));

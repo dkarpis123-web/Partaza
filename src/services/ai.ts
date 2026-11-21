@@ -14,6 +14,8 @@ export interface ShippingEstimate {
 export interface Recognition {
   title: string;
   oem: string;
+  /** true when some character of the part number could not be read for certain. */
+  numberUnsure?: boolean;
   /** Other codes read on the part or its labels, besides the part number. */
   codes?: string[];
   fits: string;

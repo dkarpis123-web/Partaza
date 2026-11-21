@@ -1,6 +1,7 @@
 import { scanCodes } from '@/services/codes';
 import { remapMarks } from '@/components/MarkedPhoto';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { cutLabel, type LabelArea } from '@/services/labels';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -748,11 +749,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Barcodes and QR codes are read on the device, from the original photos, before they are shrunk for upload.
       const [uploaded, codes] = await Promise.all([uploadPhotos(photos, me.id), scanCodes(photos)]);
       if (!uploaded.urls) return { photos, error: uploaded.error };
-      const { data, error } = await askAi({ action: 'recognize', photos: uploaded.urls, codes });
+      // Labels are cut out of the original photos, upright and enlarged, so small or upside-down numbers are read right.
+      let closeUps: string[] = [];
+      try {
+        const where = await askAi({ action: 'labels', photos: uploaded.urls });
+        const areas: LabelArea[] = Array.isArray(where.data?.labels) ? where.data.labels : [];
+        const cuts = (await Promise.all(areas.map((area) => (photos[area.photo] ? cutLabel(photos[area.photo], area) : null)))).filter((uri): uri is string => !!uri);
+        if (cuts.length > 0) closeUps = (await uploadPhotos(cuts, me.id)).urls ?? [];
+      } catch {
+        // The whole photos are still read.
+      }
+      const { data, error } = await askAi({ action: 'recognize', photos: uploaded.urls, label_photos: closeUps, codes });
       if (!data) return { photos: uploaded.urls, error };
       return {
         photos: uploaded.urls,
-        result: { title: data.title ?? '', oem: data.oem ?? '', codes: Array.isArray(data.codes) ? data.codes.filter((c: unknown) => typeof c === 'string') : [], fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, source: data.source ?? 'photo', appearance: data.appearance ?? 'unsure', appearanceNote: data.appearance_note ?? '', byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
+        result: { title: data.title ?? '', oem: data.oem ?? '', numberUnsure: !!data.number_unsure, codes: Array.isArray(data.codes) ? data.codes.filter((c: unknown) => typeof c === 'string') : [], fits: data.fits ?? '', vehicleType: data.vehicle_type ?? 'car', suggestedDefects: data.defects ?? [], isDemo: false, source: data.source ?? 'photo', appearance: data.appearance ?? 'unsure', appearanceNote: data.appearance_note ?? '', byNumber: !!data.by_number, alternatives: Array.isArray(data.alternatives) ? data.alternatives : [] },
       };
     };
 

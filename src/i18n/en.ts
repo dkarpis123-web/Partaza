@@ -486,6 +486,8 @@ export const EN: Record<string, string> = {
   'Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute.': 'If left empty, a buyer in another country cannot pay for shipping – they will ask you for the price by message.',
   'Siuntimo į kitas šalis kainą įrašykite skaičiumi, pvz., 12,00, arba palikite laukelį tuščią.': 'Enter the shipping price to other countries as a number, e.g. 12.00, or leave the field empty.',
   'Siuntimas į': 'Shipping to',
+  'DI nėra tikras dėl dalies numerio – kai kurie ženklai nuotraukoje neaiškūs. Būtinai palyginkite numerį su etikete.': 'The AI is not sure about the part number – some characters in the photo are unclear. Be sure to compare the number with the label.',
+  'Numerį ir kodus nuskaitė DI, o jis kartais suklysta. Prieš skelbdami palyginkite juos su etikete ant dalies.': 'The number and codes were read by the AI, which sometimes gets them wrong. Before publishing, compare them with the label on the part.',
   'Kiti kodai ant dalies (nebūtina)': 'Other codes on the part (optional)',
   'Pvz., 006904, 11872702': 'E.g. 006904, 11872702',
   'Visi kiti ant dalies ar etiketės matomi kodai, atskirti kableliais. Nebūtina žinoti, kuris jų pagrindinis – pirkėjai ras dalį pagal bet kurį.': 'Every other code you can see on the part or its label, separated by commas. You do not need to know which one is the main number – buyers will find the part by any of them.',
