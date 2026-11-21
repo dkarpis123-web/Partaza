@@ -134,6 +134,8 @@ interface Store extends State {
   /** Starts a payment; resolves to the address of the payment page. */
   /** extraIds: more listings of the same seller sent in the same parcel, with one delivery charge. */
   buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string, extraIds?: string[]) => Promise<{ url?: string; error?: string }>;
+  /** Looks the whole marketplace up for this text or code (the app holds only the newest 300 listings) and adds what it finds. */
+  searchServer: (query: string) => Promise<void>;
   /** The listing's own title and description in the language the app is shown in (made once, then kept). */
   translateListing: (listingId: string) => Promise<{ title?: string; description?: string; same?: boolean; error?: string }>;
   /** Opens the payment for promoting the seller's own listing (5 % of its price, 7 days). */
@@ -1184,6 +1186,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return error ? explain(error) : null;
     };
 
+    const searchServer: Store['searchServer'] = async (query) => {
+      // Letters, digits and a few separators only: the rest would break the filter syntax.
+      const words = query.replace(/[^\p{L}\p{N} .\-/]/gu, ' ').replace(/\s+/g, ' ').trim();
+      if (!supabase || words.length < 2) return;
+      const code = query.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const like = `*${words}*`;
+      const filters = [`title.ilike.${like}`, `fits.ilike.${like}`, `description.ilike.${like}`];
+      if (code.length >= 4 && /\d/.test(code)) filters.push(`search_codes.like.*${code}*`);
+      try {
+        const { data } = await supabase.from('listings').select('*').eq('status', 'active').or(filters.join(',')).order('created_at', { ascending: false }).limit(100);
+        const found = (data ?? []).map(toListing);
+        if (found.length === 0) return;
+        setState((s) => {
+          const known = new Set(s.listings.map((l) => l.id));
+          const fresh = found.filter((l) => !known.has(l.id));
+          return fresh.length === 0 ? s : { ...s, listings: [...s.listings, ...fresh] };
+        });
+      } catch {
+        // The listings already loaded are still searched.
+      }
+    };
+
     const translateListing: Store['translateListing'] = async (listingId) => {
       if (!supabase) return { error: 'Bandomojoje versijoje vertimas neveikia.' };
       try {
@@ -1279,7 +1303,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, translateListing, bumpStart, bumpSync, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, searchServer, translateListing, bumpStart, bumpSync, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(

@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { CarPicker } from '@/components/CarPicker';
@@ -37,10 +37,16 @@ export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; type?: string; special?: string }>();
   useLang();
   const router = useRouter();
-  const { listings, myCar, setMyCar, savedSearches, saveSearch, removeSearch, markSearchSeen, me, live, registered, aiMatch } = useStore();
+  const { listings, myCar, setMyCar, savedSearches, saveSearch, removeSearch, markSearchSeen, me, live, registered, aiMatch, searchServer } = useStore();
   const { width } = useWindowDimensions();
 
   const [query, setQuery] = useState(params.q ?? '');
+  // The app holds the newest listings; older ones that match are fetched from the server as the person types.
+  useEffect(() => {
+    if (!live || query.trim().length < 2) return;
+    const timer = setTimeout(() => searchServer(query), 450);
+    return () => clearTimeout(timer);
+  }, [query, live, searchServer]);
   const [type, setType] = useState<VehicleType | null>((params.type as VehicleType) || null);
   const [country, setCountry] = useState<string | null>(null);
   const [city, setCity] = useState('');

@@ -1285,3 +1285,25 @@ create table if not exists public.listing_translations (
 );
 alter table public.listing_translations enable row level security;
 revoke all on public.listing_translations from anon, authenticated;
+
+-- 31–32. Indexes for every foreign key, and the codes of a listing in one searchable column
+-- (lower case, only letters, digits and commas between codes).
+create index if not exists ai_feedback_listing_idx on public.ai_feedback (listing_id);
+create index if not exists ai_feedback_user_idx on public.ai_feedback (user_id);
+create index if not exists blocks_blocked_idx on public.blocks (blocked_id);
+create index if not exists dispute_messages_author_idx on public.dispute_messages (author_id);
+create index if not exists donors_owner_idx on public.donors (owner_id);
+create index if not exists favorites_listing_idx on public.favorites (listing_id);
+create index if not exists follows_seller_idx on public.follows (seller_id);
+create index if not exists listing_bumps_seller_idx on public.listing_bumps (seller_id);
+create index if not exists listing_finance_donor_idx on public.listing_finance (donor_id);
+create index if not exists listing_finance_seller_idx on public.listing_finance (seller_id);
+create index if not exists messages_sender_idx on public.messages (sender_id);
+create index if not exists notification_log_recipient_idx on public.notification_log (recipient_id);
+create index if not exists orders_thread_idx on public.orders (thread_id);
+create index if not exists reports_reporter_idx on public.reports (reporter_id);
+create index if not exists reviews_author_idx on public.reviews (author_id);
+create index if not exists threads_buyer_idx on public.threads (buyer_id);
+create index if not exists threads_seller_idx on public.threads (seller_id);
+alter table public.listings add column if not exists search_codes text
+  generated always as (lower(regexp_replace(coalesce(oem, '') || ',' || coalesce(alt_codes, ''), '[^A-Za-z0-9,]', '', 'g'))) stored;
