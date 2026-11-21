@@ -1,24 +1,66 @@
-// Two languages. The app is written in Lithuanian; English is produced when text is shown:
-// every piece of text passes through tr(), which looks it up in the dictionary (src/i18n/en.ts).
-// Text with no translation stays Lithuanian, so a missing entry never breaks a screen.
+// Seven languages. The app is written in Lithuanian; other languages are produced when text is shown:
+// every piece of text passes through tr(), which looks it up in that language's dictionary (src/i18n/<lang>.ts).
+// Text missing in a language falls back to English, then to Lithuanian, so a missing entry never breaks a screen.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
+import * as DE from './de';
 import { EN, EN_PATTERNS } from './en';
+import * as ET from './et';
+import * as LV from './lv';
+import * as PL from './pl';
+import * as RU from './ru';
 
-export type Lang = 'lt' | 'en';
+export type Lang = 'lt' | 'en' | 'lv' | 'et' | 'pl' | 'ru' | 'de';
+
+/** Every language, in the order shown in the picker, with its own name. */
+export const LANGUAGES: { code: Lang; name: string; short: string }[] = [
+  { code: 'lt', name: 'Lietuvių', short: 'LT' },
+  { code: 'en', name: 'English', short: 'EN' },
+  { code: 'lv', name: 'Latviešu', short: 'LV' },
+  { code: 'et', name: 'Eesti', short: 'ET' },
+  { code: 'pl', name: 'Polski', short: 'PL' },
+  { code: 'ru', name: 'Русский', short: 'RU' },
+  { code: 'de', name: 'Deutsch', short: 'DE' },
+];
+const isLang = (value: unknown): value is Lang => LANGUAGES.some((l) => l.code === value);
+
+type Pattern = [RegExp, string | ((...groups: string[]) => string)];
+const OTHER: Record<Exclude<Lang, 'lt' | 'en'>, { dict: Record<string, string>; patterns: Pattern[] }> = {
+  lv: { dict: LV.DICT, patterns: templated(LV.DICT, LV.TEMPLATES) },
+  et: { dict: ET.DICT, patterns: templated(ET.DICT, ET.TEMPLATES) },
+  pl: { dict: PL.DICT, patterns: templated(PL.DICT, PL.TEMPLATES) },
+  ru: { dict: RU.DICT, patterns: templated(RU.DICT, RU.TEMPLATES) },
+  de: { dict: DE.DICT, patterns: templated(DE.DICT, DE.TEMPLATES) },
+};
+
+/** The English patterns' expressions with a language's sentence templates: $n = the piece as it is, %n = translated. */
+function templated(dict: Record<string, string>, templates: string[]): Pattern[] {
+  const look = (piece: string) => dict[piece] ?? dict[piece.charAt(0).toUpperCase() + piece.slice(1)] ?? EN[piece] ?? piece;
+  return EN_PATTERNS.map(([pattern], i): Pattern => [
+    pattern,
+    (...groups: string[]) => (templates[i] ?? '').replace(/([$%])(\d)/g, (_m, kind: string, n: string) => {
+      const piece = groups[Number(n)] ?? '';
+      if (kind === '$' || !piece) return piece;
+      const lead = piece.match(/^\s*/)?.[0] ?? '';
+      return lead + look(piece.trim());
+    }),
+  ]).filter((_, i) => !!templates[i]);
+}
 const KEY = 'partaza.lang';
 
 /** The language of the device: what the app is shown in until the person chooses. */
 function deviceLang(): Lang {
-  const device = (typeof navigator !== 'undefined' && navigator.language) || Intl.DateTimeFormat().resolvedOptions().locale || 'lt';
-  return device.toLowerCase().startsWith('lt') ? 'lt' : 'en';
+  const device = ((typeof navigator !== 'undefined' && navigator.language) || Intl.DateTimeFormat().resolvedOptions().locale || 'lt').toLowerCase();
+  const code = device.slice(0, 2);
+  if (code === 'ee') return 'et';
+  return isLang(code) ? code : 'en';
 }
 
 function savedLang(): Lang | null {
   try {
     const saved = globalThis.localStorage?.getItem(KEY);
-    if (saved === 'lt' || saved === 'en') return saved;
+    if (isLang(saved)) return saved;
   } catch {
     // storage unavailable
   }
@@ -47,9 +89,9 @@ export function startLang() {
   // On phones there is no localStorage; the saved choice arrives a moment later.
   AsyncStorage.getItem(KEY)
     .then((stored) => {
-      const valid = stored === 'lt' || stored === 'en';
+      const valid = isLang(stored);
       chosen = valid;
-      apply(valid ? (stored as Lang) : current);
+      apply(valid ? stored : current);
     })
     .catch(() => {
       chosen = false;
@@ -108,11 +150,18 @@ export function tr(text: string): string {
   const tail = text.match(/\s*$/)?.[0] ?? '';
   const core = text.trim();
   if (!core) return text;
+  if (current !== 'en') {
+    const own = OTHER[current];
+    const mine = own.dict[core];
+    if (mine !== undefined) return lead + mine + tail;
+    for (const [pattern, replacement] of own.patterns) {
+      if (pattern.test(core)) return lead + core.replace(pattern, replacement as never) + tail;
+    }
+  }
   const exact = EN[core];
   if (exact !== undefined) return lead + exact + tail;
   for (const [pattern, replacement] of EN_PATTERNS) {
-     
-    if (pattern.test(core)) return lead + core.replace(pattern, replacement as any) + tail;
+    if (pattern.test(core)) return lead + core.replace(pattern, replacement as never) + tail;
   }
   // "Naudota · Kaunas, Lietuva": translate each piece on its own.
   if (core.includes(' · ')) return lead + core.split(' · ').map(tr).join(' · ') + tail;

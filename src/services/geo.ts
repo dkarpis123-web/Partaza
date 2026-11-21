@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import { useSyncExternalStore } from 'react';
 
 import { COUNTRY_NAMES } from '@/data/countries';
-import { getLang } from '@/i18n';
+import { getLang, tr } from '@/i18n';
 
 /** All countries a seller can choose, Lithuania and its neighbours first. */
 export const COUNTRIES = Object.keys(COUNTRY_NAMES);
@@ -21,7 +21,11 @@ export function countryCode(value: string | null | undefined): string {
 
 /** The country's name in the language the app is shown in. */
 export function countryName(code: string): string {
-  return COUNTRY_NAMES[code]?.[getLang()] ?? code;
+  const lang = getLang();
+  const names = COUNTRY_NAMES[code];
+  if (!names) return code;
+  // Lithuanian and English names are kept here; other languages take theirs from the dictionary (English if missing).
+  return lang === 'en' ? names.en : lang === 'lt' ? names.lt : tr(names.lt);
 }
 
 /** The flag for a two-letter code, built from the code itself. */

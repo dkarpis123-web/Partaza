@@ -74,7 +74,9 @@ function toolInput(result: Json, name: string): Json {
 }
 
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
-const language = (lang: unknown) => (lang === 'en' ? 'English' : 'Lithuanian');
+const LANGUAGE_NAMES: Record<string, string> = { lt: 'Lithuanian', en: 'English', lv: 'Latvian', et: 'Estonian', pl: 'Polish', ru: 'Russian', de: 'German' };
+/** The language the app is shown in; texts written by the AI come back in it. */
+const language = (lang: unknown) => LANGUAGE_NAMES[typeof lang === 'string' ? lang : ''] ?? 'Lithuanian';
 
 interface Candidate {
   title: string;
@@ -630,9 +632,9 @@ async function improve(body: Json, admin: any, userId: string): Promise<Json> {
   // The part number decides the fit: vehicles found for it on the web replace the seller's list.
   const candidates = (await lookupNumber(text(found.oem, 60), text(found.title, 120), body.lang, text(found.fits, 200))).filter((c) => c.exact);
   const byNumber = candidates[0]?.fits ?? '';
-  if (byNumber) notes.push(body.lang === 'en' ? 'Fitment was chosen by the part number from public sources – please check it.' : 'Tinkamumas parinktas pagal dalies numerį iš viešų šaltinių – patikrinkite.');
+  if (byNumber) notes.push(body.lang && body.lang !== 'lt' ? 'Fitment was chosen by the part number from public sources – please check it.' : 'Tinkamumas parinktas pagal dalies numerį iš viešų šaltinių – patikrinkite.');
   if (candidates[0] && !sameText(candidates[0].title, text(found.title, 120))) {
-    notes.push(`${body.lang === 'en' ? 'By the part number, sources call this part' : 'Pagal dalies numerį šaltiniai šią dalį vadina'}: ${candidates.map((c) => c.title).join(' / ')}`);
+    notes.push(`${body.lang && body.lang !== 'lt' ? 'By the part number, sources call this part' : 'Pagal dalies numerį šaltiniai šią dalį vadina'}: ${candidates.map((c) => c.title).join(' / ')}`);
   }
   return {
     title: text(found.title, 120),
