@@ -41,12 +41,15 @@ export function Button({
   kind = 'primary',
   disabled,
   style,
+  icon,
 }: {
   label: string;
   onPress?: () => void;
   kind?: ButtonKind;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Shown before the label, e.g. a flag. */
+  icon?: React.ReactNode;
 }) {
   const bg = kind === 'primary' ? colors.accent : kind === 'dark' ? colors.ink : kind === 'outline' ? colors.surface : 'transparent';
   const fg = kind === 'primary' || kind === 'dark' ? '#FFFFFF' : kind === 'quiet' ? colors.accent : colors.ink;
@@ -62,8 +65,10 @@ export function Button({
           backgroundColor: bg, opacity: disabled ? 0.5 : 1,
           borderWidth: kind === 'outline' ? 2 : 0, borderColor: colors.ink,
         },
+        icon ? { flexDirection: 'row', gap: 10 } : null,
         style,
       ]}>
+      {icon}
       <Text style={{ color: fg, fontSize: 15, fontWeight: '600' }}>{label}</Text>
     </Pressable>
   );

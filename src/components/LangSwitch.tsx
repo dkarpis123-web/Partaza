@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 
+import { Flag } from '@/components/Flag';
 import { LANGUAGES, setLang, useLang } from '@/i18n';
 import { colors, radius } from '@/theme';
 
@@ -16,9 +17,10 @@ export function LangSwitch() {
         accessibilityLabel={`Kalba · Language: ${current.name}`}
         onPress={() => setOpen(true)}
         style={{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
-        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.accent, borderWidth: 1.5, borderColor: colors.accent, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
-          {current.short} ▾
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: colors.accent, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+          <Flag lang={current.code} size={21} />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.accent }}>{current.short} ▾</Text>
+        </View>
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable accessibilityLabel="Uždaryti · Close" onPress={() => setOpen(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'flex-end', paddingTop: 56, paddingRight: 12 }}>
@@ -33,7 +35,7 @@ export function LangSwitch() {
                   setOpen(false);
                 }}
                 style={{ minHeight: 48, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: l.code === lang ? colors.accentSoft : 'transparent' }}>
-                <Text style={{ width: 28, fontSize: 13, fontWeight: '700', color: colors.muted }}>{l.short}</Text>
+                <Flag lang={l.code} />
                 <Text style={{ fontSize: 16, fontWeight: l.code === lang ? '700' : '500', color: colors.ink }}>{l.name}</Text>
               </Pressable>
             ))}

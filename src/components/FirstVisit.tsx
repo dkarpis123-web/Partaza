@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View , Text as PlainText } from 'react-native';
 
 import { Button } from '@/components/ui';
+import { Flag } from '@/components/Flag';
 import { LANGUAGES, type Lang, setLang, useLang, useLangChosen } from '@/i18n';
 import { allowLocation, declineLocation, useGeo } from '@/services/geo';
 import { colors, radius } from '@/theme';
@@ -60,10 +61,10 @@ export function FirstVisit() {
         <>
           <PlainText style={{ fontSize: 16, fontWeight: '700', color: colors.ink }}>Kalba · Language</PlainText>
           <PlainText style={{ fontSize: 14, lineHeight: 20, color: colors.muted }}>{`Siūlome · We suggest: ${name}`}</PlainText>
-          <Button label={name} onPress={() => setLang(suggested)} />
+          <Button label={name} icon={<Flag lang={suggested} />} onPress={() => setLang(suggested)} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {LANGUAGES.filter((l) => l.code !== suggested).map((l) => (
-              <Button key={l.code} label={l.name} kind="outline" onPress={() => setLang(l.code)} style={{ flexGrow: 1, minWidth: 110 }} />
+              <Button key={l.code} label={l.name} icon={<Flag lang={l.code} />} kind="outline" onPress={() => setLang(l.code)} style={{ flexGrow: 1, minWidth: 110 }} />
             ))}
           </View>
         </>
