@@ -5,6 +5,9 @@ export function normalize(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '');
 }
 
+/** Is the listing promoted (paid to be shown first) right now? */
+export const promoted = (listing: Pick<Listing, 'bumpedUntil'>) => !!listing.bumpedUntil && listing.bumpedUntil > Date.now();
+
 const codeOnly = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /**

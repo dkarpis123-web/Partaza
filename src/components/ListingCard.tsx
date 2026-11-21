@@ -1,3 +1,4 @@
+import { promoted } from '@/services/match';
 import { fitVerdict } from '@/services/fitment';
 import { Link } from 'expo-router';
 import React from 'react';
@@ -44,6 +45,11 @@ export function ListingCard({ listing }: { listing: Listing }) {
           <Photo uri={listing.photos[0]} height={120} />
           <View style={{ position: 'absolute', left: 8, top: 8 }}>
             <DefectBadge hasDefects={hasDefects} />
+            {promoted(listing) ? (
+              <View style={{ marginTop: 6, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.accent }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Iškeltas</Text>
+              </View>
+            ) : null}
             {listing.wholeVehicle ? (
               <View style={{ marginTop: 6, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.ink }}>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Visas automobilis</Text>

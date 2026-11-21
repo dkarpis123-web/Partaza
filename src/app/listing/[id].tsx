@@ -14,12 +14,13 @@ import { tr } from '@/i18n';
 import { CONDITION_LABELS, VEHICLE_LABELS } from '@/types';
 import { Text } from '@/components/Text';
 import { AiReview } from '@/components/AiReview';
+import { BumpBox } from '@/components/BumpBox';
 import { DestinationPicker } from '@/components/DestinationPicker';
 import { ShippingEstimate } from '@/components/ShippingEstimate';
 import { MarkedPhoto, type Marks } from '@/components/MarkedPhoto';
 
 export default function ListingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, bump } = useLocalSearchParams<{ id: string; bump?: string }>();
   const { place } = useGeo();
   const dest = useDestination().country;
   const router = useRouter();
@@ -214,6 +215,7 @@ export default function ListingScreen() {
       ) : null}
 
       {mine && live && editable && photoDraft === null ? <AiReview listing={listing} /> : null}
+      {mine && live && status === 'active' ? <BumpBox listing={listing} justPaid={bump === 'paid'} /> : null}
 
       <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: colors.ink }}>{listing.title}</Text>
       {mine ? null : (

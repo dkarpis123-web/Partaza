@@ -13,7 +13,7 @@ import { modelSearchTerm, readVin } from '@/services/vin';
 import { countryLabel, countryName, useDestination, useGeo } from '@/services/geo';
 import { shippingTo } from '@/services/shipping';
 import { tr, useLang } from '@/i18n';
-import { newMatches, normalize, textMatches } from '@/services/match';
+import { newMatches, normalize, promoted, textMatches } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { Listing, SavedSearch, VEHICLE_LABELS, VehicleType } from '@/types';
@@ -163,6 +163,9 @@ export default function SearchScreen() {
       return true;
     });
     return filtered.sort((a, b) => {
+      // Promoted listings come first in every order; they carry a badge so it is clear why.
+      const lift = Number(promoted(b)) - Number(promoted(a));
+      if (lift) return lift;
       if (sort === 'newest') return b.createdAt - a.createdAt;
       if (sort === 'place') return `${countryName(a.country)} ${a.city}`.localeCompare(`${countryName(b.country)} ${b.city}`, 'lt');
       // With a destination: known totals first, cheapest first; the rest after them by price alone.

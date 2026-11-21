@@ -1193,3 +1193,42 @@ grant execute on function public.has_thread_on(uuid) to anon, authenticated;
 
 -- 27. Other codes on the part (supplier, casting, catalogue codes), comma-separated: buyers search by them too.
 alter table public.listings add column if not exists alt_codes text not null default '' check (char_length(alt_codes) <= 300);
+
+-- ---------------------------------------------------------------------------
+-- 28. Paid promotion: a seller pays 5 % of the part's price and the listing is shown first for 7 days.
+-- ---------------------------------------------------------------------------
+alter table public.listings add column if not exists bumped_until timestamptz;
+
+create table if not exists public.listing_bumps (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid not null references public.listings (id) on delete cascade,
+  seller_id uuid not null references public.profiles (id) on delete cascade,
+  session_id text not null unique,
+  amount_cents integer not null check (amount_cents > 0),
+  status text not null default 'open' check (status in ('open', 'paid')),
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
+);
+create index if not exists listing_bumps_listing on public.listing_bumps (listing_id, status);
+alter table public.listing_bumps enable row level security;
+drop policy if exists listing_bumps_own on public.listing_bumps;
+create policy listing_bumps_own on public.listing_bumps for select to authenticated using (seller_id = (select auth.uid()));
+
+-- Only the server (after a confirmed payment) may set how long a listing is promoted.
+create or replace function public.listing_bump_guard() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.bumped_until := null;
+    else
+      new.bumped_until := old.bumped_until;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.listing_bump_guard() from public, anon, authenticated;
+drop trigger if exists listing_bump_guard on public.listings;
+create trigger listing_bump_guard before insert or update on public.listings
+  for each row execute function public.listing_bump_guard();

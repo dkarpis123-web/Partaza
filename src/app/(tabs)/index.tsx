@@ -4,6 +4,7 @@ import { ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { ListingGrid } from '@/components/ListingCard';
 import { Button, Chip, Heading, Muted, Notice, Page } from '@/components/ui';
+import { promoted } from '@/services/match';
 import { useStore } from '@/store';
 import { MAX_WIDTH, colors, radius } from '@/theme';
 import { VEHICLE_LABELS, VehicleType } from '@/types';
@@ -22,7 +23,7 @@ export default function HomeScreen() {
 
   const shown = [...listings]
     .filter((l) => (l.status ?? 'active') === 'active' && (type ? l.vehicleType === type : true) && (special === 'classic' ? !!l.classic : special === 'motorsport' ? !!l.motorsport : true))
-    .sort((a, b) => b.createdAt - a.createdAt)
+    .sort((a, b) => Number(promoted(b)) - Number(promoted(a)) || b.createdAt - a.createdAt)
     .slice(0, 12);
 
   const fromFollowed = [...listings]

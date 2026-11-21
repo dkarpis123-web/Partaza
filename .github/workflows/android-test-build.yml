@@ -31,7 +31,7 @@ jobs:
             const b = JSON.parse(require('fs').readFileSync('build.json', 'utf8'))[0];
             const url = b && b.artifacts && (b.artifacts.applicationArchiveUrl || b.artifacts.buildUrl);
             if (!url) { console.error('No APK link in the build result'); process.exit(1); }
-            require('fs').writeFileSync('/tmp/android.json', JSON.stringify({ url, version: b.appVersion || null, built: new Date().toISOString() }, null, 2) + '\n');
+            require('fs').writeFileSync('/tmp/android.json', JSON.stringify({ url, version: b.appVersion || null, built: new Date().toISOString(), runtime: b.runtimeVersion || null, channel: b.channel || null }, null, 2) + '\n');
           "
           rm build.json
           git config user.name "github-actions[bot]"

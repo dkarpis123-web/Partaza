@@ -133,6 +133,10 @@ interface Store extends State {
   report: (listingId: string) => Result;
   /** Starts a payment; resolves to the address of the payment page. */
   buy: (listingId: string, delivery: 'shipping' | 'pickup', country?: string) => Promise<{ url?: string; error?: string }>;
+  /** Opens the payment for promoting the seller's own listing (5 % of its price, 7 days). */
+  bumpStart: (listingId: string) => Promise<{ url?: string; error?: string }>;
+  /** Checks with the server whether a promotion payment went through, then reloads the listings. */
+  bumpSync: (listingId: string) => Promise<void>;
   /** Asks the server to check with the payment provider whether an order has been paid. */
   syncOrder: (orderId: string) => Result;
   orderStep: (orderId: string, step: OrderStep, text?: string, kind?: DisputeKind) => Result;
@@ -224,7 +228,7 @@ function rated(user: User, reviews: Review[]): User {
 function toListing(row: Row): Listing {
   return {
     id: row.id, title: row.title, price: Number(row.price), vat: !!row.vat, condition: row.condition,
-    defects: row.defects ?? [], oem: row.oem ?? '', altCodes: row.alt_codes ?? '', fits: row.fits ?? '', vehicleType: row.vehicle_type,
+    defects: row.defects ?? [], oem: row.oem ?? '', altCodes: row.alt_codes ?? '', bumpedUntil: row.bumped_until ? new Date(row.bumped_until).getTime() : null, fits: row.fits ?? '', vehicleType: row.vehicle_type,
     city: row.city, country: countryCode(row.country), shipping: row.shipping === null ? null : Number(row.shipping), shippingQuote: !!row.shipping_quote, shippingAbroad: row.shipping_abroad == null ? null : Number(row.shipping_abroad), photoMarks: row.photo_marks && typeof row.photo_marks === 'object' ? row.photo_marks : {},
     pickup: !!row.pickup, sellerId: row.seller_id, photos: row.photos ?? [], allowOffers: !!row.allow_offers,
     createdAt: new Date(row.created_at).getTime(), classic: !!row.classic, motorsport: !!row.motorsport, description: row.description ?? '', wholeVehicle: !!row.whole_vehicle, refreshedAt: row.refreshed_at ? new Date(row.refreshed_at).getTime() : null, status: row.status === 'sold' ? 'sold' : row.status === 'reserved' ? 'reserved' : row.status === 'pending' ? 'pending' : row.status === 'rejected' ? 'rejected' : 'active',
@@ -1173,6 +1177,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return error ? explain(error) : null;
     };
 
+    const bumpStart: Store['bumpStart'] = async (listingId) => {
+      if (!supabase) return { error: 'Bandomojoje versijoje iškėlimas neveikia.' };
+      try {
+        const { data, error } = await supabase.functions.invoke('bump', { body: { action: 'start', listing_id: listingId } });
+        if (error || !data) return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+        if (data.error) return { error: data.error === 'not_configured' ? 'Skelbimų iškėlimas dar neįjungtas.' : data.error === 'listing_not_active' ? 'Iškelti galima tik paskelbtą skelbimą.' : 'Nepavyko atidaryti mokėjimo. Bandykite dar kartą.' };
+        return { url: String(data.url) };
+      } catch {
+        return { error: 'Nepavyko susisiekti su serveriu. Patikrinkite interneto ryšį ir bandykite dar kartą.' };
+      }
+    };
+
+    const bumpSync: Store['bumpSync'] = async (listingId) => {
+      if (!supabase) return;
+      try {
+        await supabase.functions.invoke('bump', { body: { action: 'sync', listing_id: listingId } });
+        await refresh();
+      } catch {
+        // The listing simply stays as it was.
+      }
+    };
+
     const buy: Store['buy'] = async (listingId, delivery, country) => {
       const answer = await pay({ action: 'checkout', listing_id: listingId, delivery, ...(country ? { country } : {}) });
       if (answer.error) return { error: answer.error };
@@ -1235,7 +1261,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return null;
     };
 
-    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
+    return { registerDemo, createOrder, orderAction, leaveReview, checkVat, removeVat, setName, aiRecognize, aiMatch, aiPrices, aiImprove, applyFix, aiShipping, aiFeedback, bumpStart, bumpSync, checkListing, toggleFavorite, toggleFollow, saveSearch, removeSearch, markSearchSeen, blockUser, unblockUser, setPhone, requestPasswordReset, changePassword, completeAuthLink, updatePhotos, signUp, signIn, signOut, setKind, setLogo, setAway, addListing, updateListing, addDonor, markSold, reducePrice, openThread, sendText, sendOffer, answerOffer, report, buy, syncOrder, orderStep, loadDispute, sendDispute, payoutStatus, startPayouts, deleteAccount };
   }, [refresh]);
 
   const unreadThreadIds = useMemo(
