@@ -7,7 +7,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import { PHOTO_BUCKET, supabase } from '@/backend/client';
 import { seedListings, seedUsers } from '@/data/seed';
-import { getLang } from '@/i18n';
+import { getLang, useLang } from '@/i18n';
 import type { Recognition, ShippingEstimate, WebPrices } from '@/services/ai';
 import { countryCode } from '@/services/geo';
 import type { DisputeKind, DisputeMessage, Donor, Listing, ListingDraft, Message, MyCar, Order, PaidOrder, Review, SavedSearch, SellerKind, Thread, User } from '@/types';
@@ -371,6 +371,15 @@ const StoreContext = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(initialState);
+  // The language chosen in the app is kept with the account, so sign-in e-mails (password, e-mail change) come in it.
+  const lang = useLang();
+  const signedIn = state.registered;
+  useEffect(() => {
+    if (!supabase || !signedIn) return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user && data.user.user_metadata?.lang !== lang) supabase?.auth.updateUser({ data: { lang } }).catch(() => {});
+    }).catch(() => {});
+  }, [lang, signedIn]);
   // Actions read the latest state through this ref so they never work on a stale copy.
   const stateRef = useRef(state);
   useEffect(() => {
@@ -930,7 +939,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!supabase) return null;
       // After confirming the e-mail the person lands back on this site (web) instead of a default address.
       const emailRedirectTo = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind, phone }, emailRedirectTo } });
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name, kind, phone, lang: getLang() }, emailRedirectTo } });
       if (error) return explain(error);
       // For an address that is already registered the server answers "success" without sending
       // anything (so strangers cannot probe addresses); the tell-tale is an empty identities list.
