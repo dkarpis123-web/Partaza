@@ -102,7 +102,7 @@ export function DefectBadge({ hasDefects, count }: { hasDefects: boolean; count?
   );
 }
 
-export function Field({ label, hint, ...input }: { label: string; hint?: string } & TextInputProps) {
+export function Field({ label, hint, error, ...input }: { label: string; hint?: string; error?: string } & TextInputProps) {
   return (
     <View style={{ gap: 6 }}>
       <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>{label}</Text>
@@ -112,12 +112,13 @@ export function Field({ label, hint, ...input }: { label: string; hint?: string 
         {...input}
         style={[
           {
-            minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: colors.border,
+            minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, borderWidth: error ? 2 : 1, borderColor: error ? '#B42318' : colors.border,
             borderRadius: radius.md, backgroundColor: colors.surface, fontSize: 15, color: colors.ink,
           },
           input.style,
         ]}
       />
+      {error ? <Text style={{ fontSize: 13, fontWeight: '600', color: '#B42318' }}>{error}</Text> : null}
       {hint ? <Text style={{ fontSize: 12, color: colors.muted }}>{hint}</Text> : null}
     </View>
   );

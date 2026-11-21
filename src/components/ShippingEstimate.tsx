@@ -45,7 +45,7 @@ export function ShippingEstimate({ title, oem, fits, from, to, current, onUse }:
           {onUse ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {[shown.low ?? 0, middle, shown.high ?? 0].filter((v, i, all) => v > 0 && all.indexOf(v) === i).map((v) => (
-                <Chip key={v} label={current === v ? `${tr('Pritaikyta')}: ${money(v)}` : `${tr('Naudoti')} ${money(v)}`} selected={current === v} onPress={() => onUse(v)} />
+                <Chip key={v} label={current === v ? `${tr('Pritaikyta')}: ${money(v)}` : money(v)} selected={current === v} onPress={() => onUse(v)} />
               ))}
             </View>
           ) : null}

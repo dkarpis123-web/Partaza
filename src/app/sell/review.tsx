@@ -205,24 +205,34 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   const advice = useMemo(() => priceAdviceFromMarket(oem, editing ? listings.filter((l) => l.id !== editing.id) : listings, defects.length > 0), [oem, listings, defects.length, editing]);
   const price = parsePrice(priceText);
 
+  // Everything that stops the listing from being published, each tied to its field. Shown after the first try.
+  const [tried, setTried] = useState(false);
+  const found: Record<string, string> = {};
+  if (!title.trim()) found.title = 'Įrašykite pavadinimą.';
+  if (price === null) found.price = priceText.trim() ? 'Kainą įrašykite skaičiumi, pvz., 85 arba 85,50.' : 'Įrašykite kainą, pvz., 85 arba 85,50.';
+  if (!city.trim()) found.city = 'Įrašykite miestą, kuriame yra dalis.';
+  if (shipMode === 'price' && parsePrice(shipText) === null) found.ship = 'Įrašykite siuntimo kainą, pvz., 3,50, arba pasirinkite kitą siuntimo būdą.';
+  if (shipMode === 'price' && abroadText.trim() && parsePrice(abroadText) === null) found.abroad = 'Siuntimo į kitas šalis kainą įrašykite skaičiumi, pvz., 12,00, arba palikite laukelį tuščią.';
+  if (!donor && costText.trim() && parsePrice(costText) === null) found.cost = 'Pirkimo kainą įrašykite skaičiumi, pvz., 20.';
+  const problems = Object.values(found);
+  const shown = tried ? found : {};
+
   const publish = async () => {
     if (publishing) return;
-    if (!title.trim()) return setError('Įrašykite pavadinimą.');
-    if (price === null) return setError('Įrašykite kainą, pvz., 85 arba 85,50.');
-    if (!city.trim()) return setError('Įrašykite miestą, kuriame yra dalis.');
+    setTried(true);
+    setError('');
+    if (problems.length > 0) return;
     const shipping = shipMode === 'price' ? parsePrice(shipText) : null;
-    if (shipMode === 'price' && shipping === null) return setError('Įrašykite siuntimo kainą, pvz., 3,50, arba pasirinkite kitą siuntimo būdą.');
     const shippingAbroad = shipMode === 'price' && abroadText.trim() ? parsePrice(abroadText) : null;
-    if (shipMode === 'price' && abroadText.trim() && shippingAbroad === null) return setError('Siuntimo į kitas šalis kainą įrašykite skaičiumi, pvz., 12,00, arba palikite laukelį tuščią.');
     const shippingQuote = shipMode === 'quote';
     const cost = costText.trim() ? parsePrice(costText) : null;
-    if (costText.trim() && cost === null) return setError('Pirkimo kainą įrašykite skaičiumi, pvz., 20.');
     if (!registered) {
       // The form state is kept while the seller registers and comes back.
       router.push('/register');
       return;
     }
     if (!phone) return setError('Profilyje įrašykite telefono numerį – be jo skelbimo įdėti negalima.');
+    if (price === null) return;
     setPublishing(true);
     const draft = {
       title: title.trim(), price, vat, condition, defects, oem: oem.trim(), fits: fits.trim(), vehicleType,
@@ -255,7 +265,22 @@ function ReviewForm({ editing }: { editing?: Listing }) {
   }
 
   return (
-    <Page footer={<Button label={publishing ? 'Saugoma…' : editing ? 'Išsaugoti pakeitimus' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} />}>
+    <Page
+      footer={
+        <View style={{ gap: 8 }}>
+          {tried && problems.length > 0 ? (
+            <View accessibilityRole="alert" style={{ gap: 4, padding: 10, borderRadius: 10, borderWidth: 2, borderColor: '#B42318', backgroundColor: '#FEF3F2' }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#B42318' }}>{editing ? 'Kad išsaugotume, pataisykite:' : 'Kad paskelbtume, pataisykite:'}</Text>
+              {problems.map((p) => (
+                <Text key={p} style={{ fontSize: 14, color: '#7A271A' }}>{`• ${tr(p)}`}</Text>
+              ))}
+              <Text style={{ fontSize: 12, color: '#7A271A' }}>Šie laukai formoje pažymėti raudonai.</Text>
+            </View>
+          ) : null}
+          {error ? <Notice tone="warn">{error}</Notice> : null}
+          <Button label={publishing ? 'Saugoma…' : editing ? 'Išsaugoti pakeitimus' : price !== null ? `Paskelbti už ${money(price)}` : 'Paskelbti'} onPress={publish} disabled={publishing} />
+        </View>
+      }>
       {isDemo ? (
         <Notice tone="warn">Bandomoji versija: dalies atpažinimas dar neprijungtas, todėl laukai užpildyti pavyzdžiu. Pataisykite juos pagal savo dalį.</Notice>
       ) : aiNote && aiNote !== 'ok' ? (
@@ -290,7 +315,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
       </Card>
 
       <Card>
-        <Field label="Pavadinimas" value={title} onChangeText={setTitle} />
+        <Field label="Pavadinimas" value={title} onChangeText={setTitle} error={shown.title} />
         <Field label="Dalies (OEM) numeris" value={oem} onChangeText={setOem} hint="Pagal numerį pirkėjai ras dalį ir matysime panašių dalių kainas." />
         <Field label="Kam tinka" value={fits} onChangeText={setFits} placeholder="Pvz., VW Transporter T5, T6" />
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -416,11 +441,11 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             ) : null}
           </View>
         ) : null}
-        <Field label="Kaina, €" value={priceText} onChangeText={setPriceText} keyboardType="decimal-pad" placeholder="0,00" />
+        <Field label="Kaina, €" value={priceText} onChangeText={setPriceText} keyboardType="decimal-pad" placeholder="0,00" error={shown.price} />
         {donor ? (
           <Muted>Dalis iš automobilio „{donor.name}“. Išlaidos skaičiuojamos pagal automobilio kainą ({money(donor.cost)}).</Muted>
         ) : (
-          <Field label="Už kiek pirkote, € (nebūtina)" value={costText} onChangeText={setCostText} keyboardType="decimal-pad" placeholder="0,00" hint="Matote tik jūs. Pagal tai apskaita parodys pelną." />
+          <Field label="Už kiek pirkote, € (nebūtina)" value={costText} onChangeText={setCostText} keyboardType="decimal-pad" placeholder="0,00" error={shown.cost} hint="Matote tik jūs. Pagal tai apskaita parodys pelną." />
         )}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Be PVM" selected={!vat} onPress={() => setVat(false)} />
@@ -438,7 +463,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
         </View>
         {shipMode === 'price' ? (
           <>
-            <Field label="Siuntimo kaina jūsų šalyje, €" value={shipText} onChangeText={setShipText} keyboardType="decimal-pad" placeholder="0,00" />
+            <Field label="Siuntimo kaina jūsų šalyje, €" value={shipText} onChangeText={setShipText} keyboardType="decimal-pad" placeholder="0,00" error={shown.ship} />
             <Muted>Mūsų siūlomos kainos pagal siuntos dydį:</Muted>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {SHIPPING.map((s) => (
@@ -446,7 +471,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
               ))}
             </View>
             {live && (title.trim() || oem.trim()) ? <ShippingEstimate title={title.trim()} oem={oem.trim()} fits={fits.trim()} from={country} to={country} current={parsePrice(shipText)} onUse={(p) => setShipText(toText(p))} /> : null}
-            <Field label="Siuntimo kaina į kitas ES šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
+            <Field label="Siuntimo kaina į kitas ES šalis, € (nebūtina)" value={abroadText} onChangeText={setAbroadText} keyboardType="decimal-pad" placeholder="0,00" error={shown.abroad} hint="Palikus tuščią, pirkėjas iš kitos šalies negalės apmokėti siuntimo – jis kainos klaus žinute." />
             <Notice tone="warn">Siuntimo kainą nustatote patys. Mūsų siūlomos kainos yra orientacinės ir gali skirtis nuo tikrų vežėjų kainų. Už siuntimo kainos skirtumą atsako pardavėjas.</Notice>
           </>
         ) : null}
@@ -471,14 +496,13 @@ function ReviewForm({ editing }: { editing?: Listing }) {
             </View>
           </>
         ) : null}
-        <Field label="Miestas" value={city} onChangeText={setCity} placeholder="Pvz., Kaunas" />
+        <Field label="Miestas" value={city} onChangeText={setCity} placeholder="Pvz., Kaunas" error={shown.city} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Chip label="Leisti siūlyti kainą" selected={allowOffers} onPress={() => setAllowOffers((v) => !v)} />
         </View>
       </Card>
 
       {publishing ? <Notice>Keliamos nuotraukos ir saugomas skelbimas. Tai gali užtrukti iki minutės – neuždarykite lango.</Notice> : null}
-      {error ? <Notice tone="warn">{error}</Notice> : null}
     </Page>
   );
 }
