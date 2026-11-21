@@ -1307,3 +1307,55 @@ create index if not exists threads_buyer_idx on public.threads (buyer_id);
 create index if not exists threads_seller_idx on public.threads (seller_id);
 alter table public.listings add column if not exists search_codes text
   generated always as (lower(regexp_replace(coalesce(oem, '') || ',' || coalesce(alt_codes, ''), '[^A-Za-z0-9,]', '', 'g'))) stored;
+
+-- 33. Limits against spam: how many messages, new conversations and reports one person may send.
+-- Only callers signed in as a user are counted; the server's own functions are not limited.
+create index if not exists messages_sender_created_idx on public.messages (sender_id, created_at desc);
+create index if not exists threads_buyer_created_idx on public.threads (buyer_id, created_at desc);
+create index if not exists reports_reporter_created_idx on public.reports (reporter_id, created_at desc);
+drop index if exists public.messages_sender_idx;
+drop index if exists public.threads_buyer_idx;
+drop index if exists public.reports_reporter_idx;
+
+create or replace function public.message_rate_limit()
+returns trigger language plpgsql security definer set search_path to '' as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if (select count(*) from public.messages m where m.sender_id = new.sender_id and m.created_at > now() - interval '1 minute') >= 20
+     or (select count(*) from public.messages m where m.sender_id = new.sender_id and m.created_at > now() - interval '1 day') >= 500 then
+    raise exception 'too_many_messages';
+  end if;
+  return new;
+end; $$;
+
+create or replace function public.thread_rate_limit()
+returns trigger language plpgsql security definer set search_path to '' as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if (select count(*) from public.threads t where t.buyer_id = new.buyer_id and t.created_at > now() - interval '1 hour') >= 30
+     or (select count(*) from public.threads t where t.buyer_id = new.buyer_id and t.created_at > now() - interval '1 day') >= 150 then
+    raise exception 'too_many_threads';
+  end if;
+  return new;
+end; $$;
+
+create or replace function public.report_rate_limit()
+returns trigger language plpgsql security definer set search_path to '' as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if (select count(*) from public.reports r where r.reporter_id = new.reporter_id and r.created_at > now() - interval '1 day') >= 30 then
+    raise exception 'too_many_reports';
+  end if;
+  return new;
+end; $$;
+
+revoke execute on function public.message_rate_limit() from public, anon, authenticated;
+revoke execute on function public.thread_rate_limit() from public, anon, authenticated;
+revoke execute on function public.report_rate_limit() from public, anon, authenticated;
+
+drop trigger if exists message_rate_limit on public.messages;
+create trigger message_rate_limit before insert on public.messages for each row execute function public.message_rate_limit();
+drop trigger if exists thread_rate_limit on public.threads;
+create trigger thread_rate_limit before insert on public.threads for each row execute function public.thread_rate_limit();
+drop trigger if exists report_rate_limit on public.reports;
+create trigger report_rate_limit before insert on public.reports for each row execute function public.report_rate_limit();
