@@ -465,7 +465,7 @@ function ReviewForm({ editing }: { editing?: Listing }) {
           onSelect={(name) => { setVehicleType(TYPES.find((t) => tr(VEHICLE_LABELS[t]) === name) ?? 'car'); setTypeOpen(false); }}
         />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Chip icon="car-convertible" label="Senovinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
+          <Chip icon="car-vintage" label="Senovinio automobilio dalis" selected={classic} onPress={() => setClassic((v) => !v)} />
           <Chip icon="flag-checkered" label="Automotosporto dalis" selected={motorsport} onPress={() => setMotorsport((v) => !v)} />
         </View>
         <Text style={{ fontSize: 13, fontWeight: '600', color: colors.ink }}>Būklė</Text>
